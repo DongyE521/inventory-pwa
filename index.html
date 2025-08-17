@@ -112,7 +112,7 @@
       text-align: center; 
       box-sizing: border-box; 
     }
-    #fileInput, #batchFileInput { 
+    #fileInput, #batchFileInput, #materialLibFileInput { 
       display: none; 
     }
    .batch-upload { 
@@ -192,7 +192,7 @@
       cursor: pointer; 
       box-sizing: border-box; 
     }
-        /* 滚动按钮 */
+    /* 滚动按钮 */
    .scroll-btn { 
       position: fixed; 
       width: 50px; 
@@ -321,7 +321,7 @@
 <body>
   <!-- 浏览器适配提示 -->
   <div class="browser-guide">
-    <p>🌐 <span class="highlight">ALOOK浏览器适配：</span>搜索功能已修复，支持上下滚动</p>
+    <p>🌐 <span class="highlight">使用提示：</span>先上传物料库CSV，新增物料时输入料号/型号可自动填充信息</p>
   </div>
   
   <!-- 标题与统计信息 -->
@@ -333,27 +333,37 @@
   
   <!-- 批量导入区域 -->
   <div class="batch-upload">
-    <p>批量追加数据（CSV格式）：</p>
-    <label for="batchFileInput" class="batch-label">选择CSV文件</label>
+    <p>批量追加盘点数据（CSV格式）：</p>
+    <label for="batchFileInput" class="batch-label">选择盘点CSV</label>
     <input type="file" id="batchFileInput" accept=".csv">
     <span style="font-size:14px; color:#666;">格式：物料编号,名称,规格,系统数量,实际数量,存放位置</span>
+  </div>
+  
+  <!-- 物料库单独上传区域 -->
+  <div class="batch-upload" style="background:#e6f7ff;">
+    <p>📚 物料库管理（仅用于自动填充）：</p>
+    <label for="materialLibFileInput" class="batch-label" style="background:#52c41a;">上传物料库CSV</label>
+    <input type="file" id="materialLibFileInput" accept=".csv">
+    <button class="batch-label" style="background:#faad14;" onclick="clearMaterialLib()">清空物料库</button>
+    <span style="font-size:14px; color:#666;">物料库格式：物料编号,物料名称,规格（仅这三列）</span>
+    <p style="margin:8px 0 0 0; font-size:14px;">当前物料库数量：<span id="materialLibCount">0</span> 种</p>
   </div>
   
   <!-- 库存表格 -->
   <table id="inventoryTable">
     <thead>
-  <tr>
-    <<th>序号</</th>
-    <<th>物料编号</</th>
-    <<th>物料名称</</th>
-    <<th>规格</</th>
-    <<th>系统数量</</th>
-    <<th>实际数量</</th>
-    <<th>存放位置</</th>
-    <<th>状态</</th>
-    <<th>操作</</th>
-  </tr>
-</thead>
+      <tr>
+        <<th>序号</</th>
+        <<th>物料编号</</th>
+        <<th>物料名称</</th>
+        <<th>规格</</th>
+        <<th>系统数量</</th>
+        <<th>实际数量</</th>
+        <<th>存放位置</</th>
+        <<th>状态</</th>
+        <<th>操作</</th>
+      </tr>
+    </thead>
     <tbody></tbody>
   </table>
   
@@ -402,11 +412,12 @@
       });
     }
   </script>
-    <!-- 核心功能脚本 -->
+  <!-- 核心功能脚本 -->
   <script>
-    // 全局变量（确保操作历史在最顶部初始化）
-    let inventory = JSON.parse(localStorage.getItem("inventory")) || [];
-    let operationHistory = []; // 存储操作历史（用于撤回功能）
+    // 全局变量：物料库与盘点数据完全分离
+    let inventory = JSON.parse(localStorage.getItem("inventory")) || []; // 盘点清单数据
+    let materialMap = JSON.parse(localStorage.getItem("materialMap")) || {}; // 物料库（单独存储）
+    let operationHistory = []; // 操作历史（用于撤回）
     let currentSearchKeyword = "";
     let pendingImportFile = null;
 
@@ -416,17 +427,21 @@
     const countedCountEl = document.getElementById("countedCount");
     const tipEl = document.getElementById("tip");
     const searchInput = document.getElementById("searchInput");
-    const csvContentEl = document.getElementById("csvContent");
-    const exportArea = document.getElementById("exportArea");
-    const exportFormat = document.getElementById("exportFormat");
     const formatModal = document.getElementById("formatModal");
+    // 物料库相关元素
+    const materialLibFileInput = document.getElementById("materialLibFileInput");
+    const materialLibCountEl = document.getElementById("materialLibCount");
 
     // 页面初始化
     document.addEventListener('DOMContentLoaded', function() {
+      // 加载物料库并更新计数
+      updateMaterialLibCount();
+      // 绑定物料库上传事件
+      materialLibFileInput.addEventListener("change", handleMaterialLibImport);
+      // 原有初始化逻辑
       renderTable();
       updateSummary();
       searchInput.addEventListener('input', handleSearch);
-      // 绑定文件导入事件
       document.getElementById("batchFileInput").addEventListener("change", handleBatchImport);
       document.getElementById("fileInput").addEventListener("change", handleFullImport);
     });
@@ -476,29 +491,103 @@
       updateSummary();
     }
 
-    // 更新物料字段
+    // 更新物料字段（支持自动填充）
     function updateField(index, field, value) {
       if (inventory[index]) {
         value = value || "";
-        if (field === 'code') {
-          inventory[index].code = value;
-          // 检查重复
+        inventory[index][field] = value;
+
+        // 编辑料号时自动填充名称和型号（仅当名称/型号为空时）
+        if (field === "code") {
+          const code = value.trim();
+          const item = inventory[index];
+          if (materialMap[code] && (!item.name ||!item.spec)) {
+            item.name = item.name || materialMap[code].name; // 保留手动输入
+            item.spec = item.spec || materialMap[code].spec; // 保留手动输入
+            showTip(`已自动更新料号「${code}」的信息`);
+          }
+        }
+
+        // 检查重复
+        if (field === "code") {
           const isDuplicate = inventory.some((item, i) => i!== index && item.code === value);
           inventory[index].duplicate = isDuplicate;
-        } else {
-          inventory[index][field] = value;
         }
+
         localStorage.setItem("inventory", JSON.stringify(inventory));
-        showTip(`已更新「${inventory[index].name || '未命名物料'}」`);
-        updateSummary();
         renderTable();
+        updateSummary();
       }
     }
 
-    // 删除物料行（记录操作历史）
+    // 新增物料（支持自动填充）
+    function addNewItem() {
+      const newId = `WL${Date.now().toString().slice(-6)}`; // 生成临时料号
+      const newItem = {
+        code: newId,
+        name: "",
+        spec: "",
+        sysQty: "0",
+        realQty: "",
+        location: "",
+        duplicate: false
+      };
+      inventory.push(newItem);
+      renderTable();
+      showTip("新增物料行：输入料号/型号可自动填充信息");
+      scrollToBottom();
+
+      // 监听新增行的输入事件（实现自动填充）
+      setTimeout(() => {
+        const rows = tbody.querySelectorAll("tr");
+        const lastRow = rows[rows.length - 1];
+        const codeInput = lastRow.querySelector("td:nth-child(2)"); // 料号列
+        const nameInput = lastRow.querySelector("td:nth-child(3)"); // 名称列
+        const specInput = lastRow.querySelector("td:nth-child(4)"); // 型号列
+
+        // 标记是否已自动填充（避免覆盖手动输入）
+        let codeAutoFilled = false;
+        let specAutoFilled = false;
+
+        // 监听料号输入：首次匹配时填充
+        codeInput.addEventListener("input", function() {
+          const code = this.innerText.trim();
+          if (!codeAutoFilled && materialMap[code]) {
+            nameInput.innerText = materialMap[code].name;
+            specInput.innerText = materialMap[code].spec;
+            codeAutoFilled = true; // 标记为已填充
+            showTip(`已自动填充料号「${code}」的信息`);
+          }
+        });
+
+        // 监听型号输入：首次匹配时填充
+        specInput.addEventListener("input", function() {
+          const spec = this.innerText.trim().toLowerCase();
+          if (!specAutoFilled) {
+            for (const code in materialMap) {
+              if (materialMap[code].spec.toLowerCase().includes(spec)) {
+                codeInput.innerText = code;
+                nameInput.innerText = materialMap[code].name;
+                specAutoFilled = true; // 标记为已填充
+                showTip(`已根据型号匹配料号「${code}」`);
+                break;
+              }
+            }
+          }
+        });
+
+        // 手动修改名称时取消自动填充标记
+        nameInput.addEventListener("input", function() {
+          codeAutoFilled = true;
+          specAutoFilled = true;
+        });
+      }, 100);
+    }
+
+    // 删除物料行
     function deleteRow(index) {
       const deletedItem = inventory[index];
-      if (!deletedItem) return; // 防止无效索引
+      if (!deletedItem) return;
       inventory.splice(index, 1);
       checkAllDuplicates();
       // 记录删除操作到历史
@@ -517,9 +606,8 @@
         showTip("没有可撤回的操作", "error");
         return;
       }
-      const lastOp = operationHistory.pop(); // 取出最后一次操作
+      const lastOp = operationHistory.pop();
       if (lastOp.type === 'delete') {
-        // 将物料插回原位置
         inventory.splice(lastOp.index, 0, lastOp.item); 
         checkAllDuplicates();
         localStorage.setItem("inventory", JSON.stringify(inventory));
@@ -536,24 +624,63 @@
       });
     }
 
-    // 新增物料
-    function addNewItem() {
-      const newItem = {
-        code: `WL${Date.now().toString().slice(-6)}`, // 生成唯一编号
-        name: "未命名物料",
-        spec: "",
-        sysQty: "0",
-        realQty: "",
-        location: "",
-        duplicate: false
+    // 物料库管理功能
+    function handleMaterialLibImport(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        try {
+          const content = event.target.result;
+          const lines = content.split("\n").map(l => l.trim()).filter(l => l);
+          if (lines.length === 0) {
+            showTip("物料库文件为空", "error");
+            return;
+          }
+          // 解析物料库CSV（仅保留：编号,名称,规格）
+          const newMaterialMap = {};
+          lines.forEach((line, i) => {
+            const cols = line.split(",").map(c => c.trim());
+            // 跳过表头行（如果有）
+            if (i === 0 && (cols[0] === "物料编号" || cols[0] === "序号")) return;
+            if (cols.length >= 3 && cols[0]) { // 必须包含编号、名称、规格
+              newMaterialMap[cols[0]] = {
+                name: cols[1] || "",
+                spec: cols[2] || ""
+              };
+            }
+          });
+          // 合并到现有物料库（去重，新数据覆盖旧数据）
+          Object.assign(materialMap, newMaterialMap);
+          // 保存到本地存储
+          localStorage.setItem("materialMap", JSON.stringify(materialMap));
+          updateMaterialLibCount();
+          showTip(`物料库上传成功：新增/更新 ${Object.keys(newMaterialMap).length} 种物料`);
+        } catch (err) {
+          showTip("物料库导入失败，请检查格式", "error");
+          console.error(err);
+        }
+        this.value = ""; // 重置文件输入
       };
-      inventory.push(newItem);
-      renderTable();
-      showTip("已新增空白物料行");
-      scrollToBottom(); // 滚动到表格底部
+      reader.readAsText(file, "UTF-8");
     }
 
-    // 显示导出格式弹窗
+    // 清空物料库
+    function clearMaterialLib() {
+      if (confirm("确定要清空物料库吗？所有自动填充规则将失效！")) {
+        materialMap = {};
+        localStorage.setItem("materialMap", JSON.stringify(materialMap));
+        updateMaterialLibCount();
+        showTip("物料库已清空");
+      }
+    }
+
+    // 更新物料库计数显示
+    function updateMaterialLibCount() {
+      const count = Object.keys(materialMap).length;
+      materialLibCountEl.textContent = count;
+    }
+    // 导出功能相关
     function showFormatModal() {
       if (inventory.length === 0) {
         showTip("没有数据可导出", "error");
@@ -562,20 +689,17 @@
       formatModal.style.display = "flex";
     }
 
-    // 关闭导出弹窗
     function closeFormatModal() {
       formatModal.style.display = "none";
     }
 
-    // 确认导出格式（直接导出，无预览）
     function confirmExportFormat() {
-      const format = exportFormat.value;
+      const format = document.getElementById("exportFormat").value;
       closeFormatModal();
       if (format === "csv") {
         const content = generateCSV();
-        const fileName = prompt('请输入文件名（默认：库存盘点.csv）', '库存盘点.csv');
+        const fileName = prompt('请输入文件名', '库存盘点.csv');
         if (fileName) {
-          // 原生下载CSV
           const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
           const link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
@@ -585,12 +709,10 @@
           showTip("已导出CSV文件");
         }
       } else {
-        // 弹出Excel文件名输入框
         showFileNameModal();
       }
     }
 
-    // 文件名输入弹窗（Excel导出专用）
     function showFileNameModal() {
       const fileNameModal = document.createElement("div");
       fileNameModal.className = "modal";
@@ -607,7 +729,6 @@
       `;
       document.body.appendChild(fileNameModal);
       fileNameModal.style.display = "flex";
-      // 绑定确认按钮事件
       fileNameModal.querySelector(".modal-confirm").onclick = function() {
         const fileName = fileNameModal.querySelector("#fileNameInput").value.trim() || 
                         `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}`;
@@ -654,13 +775,12 @@
       })));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "库存盘点");
-      // 生成文件并下载
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${fileName}.xlsx`);
       showTip(`已生成Excel文件：${fileName}.xlsx`);
     }
 
-    // 批量追加导入
+    // 批量导入盘点数据（不影响物料库）
     function handleBatchImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -694,16 +814,16 @@
             }
           });
           renderTable();
-          showTip(`批量追加完成：新增${newCount}条`);
+          showTip(`批量追加完成：新增${newCount}条盘点数据`);
         } catch (err) {
           showTip("批量导入失败，请检查格式", "error");
         }
+        this.value = "";
       };
       reader.readAsText(file, "UTF-8");
-      this.value = "";
     }
 
-    // 重新导入（覆盖数据）
+    // 重新导入（覆盖盘点数据，不影响物料库）
     function handleFullImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -715,7 +835,7 @@
       `;
       confirmOverlay.innerHTML = `
         <div style="background:white; padding:20px; border-radius:8px; max-width:280px;">
-          <p style="text-align:center; margin:0 0 15px 0;">确定要重新导入数据吗？当前数据将被覆盖。</p>
+          <p style="text-align:center; margin:0 0 15px 0;">确定要重新导入数据吗？当前盘点数据将被覆盖。</p>
           <div style="display:flex; gap:10px;">
             <button id="confirmYes" style="flex:1; padding:8px; background:#1890ff; color:white; border:none; border-radius:4px;">确定</button>
             <button id="confirmNo" style="flex:1; padding:8px; background:#f5f5f5; border:none; border-radius:4px;">取消</button>
@@ -738,8 +858,7 @@
       const reader = new FileReader();
       reader.onload = function (event) {
         try {
-          inventory = [];
-          localStorage.setItem("inventory", JSON.stringify(inventory));
+          inventory = []; // 仅清空盘点数据，不影响物料库
           const content = event.target.result;
           const lines = content.split("\n").map(l => l.trim()).filter(l => l);
           if (lines.length === 0) {
@@ -762,7 +881,7 @@
           });
           localStorage.setItem("inventory", JSON.stringify(inventory));
           renderTable();
-          showTip(`重新导入完成：共${inventory.length}条`);
+          showTip(`重新导入完成：共${inventory.length}条盘点数据`);
         } catch (err) {
           showTip("导入失败，请检查格式", "error");
         } finally {
@@ -775,7 +894,10 @@
     // 更新统计信息
     function updateSummary() {
       totalCountEl.textContent = inventory.length;
-      const counted = inventory.filter(item => item.realQty!== "" &&!isNaN(item.realQty)).length;
+      // 统计已填写实际数量的物料
+      const counted = inventory.filter(item => {
+        return item.realQty!== "" &&!isNaN(item.realQty.trim());
+      }).length;
       countedCountEl.textContent = counted;
     }
 
@@ -785,13 +907,22 @@
       tipEl.style.background = type === "success"? "#52c41a" : "#ff4d4f";
       tipEl.style.display = "block";
       clearTimeout(window.tipTimer);
-      window.tipTimer = setTimeout(() => tipEl.style.display = "none", 3500);
+      window.tipTimer = setTimeout(() => {
+        tipEl.style.display = "none";
+      }, 3500);
     }
 
     // 滚动到顶部/底部
-    function scrollToTop() { window.scrollTo({ top: 0, behavior: "smooth" }); }
-    function scrollToBottom() { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); }
+    function scrollToTop() {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function scrollToBottom() {
+      window.scrollTo({ 
+        top: document.documentElement.scrollHeight, 
+        behavior: "smooth" 
+      });
+    }
   </script>
 </body>
 </html>
-  
