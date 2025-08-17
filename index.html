@@ -91,17 +91,6 @@
       border-radius: 4px; 
       cursor: pointer; 
     }
-   .primary-btn { 
-      background: #1890ff; 
-      color: white; 
-      padding: 14px 0; 
-      border: none; 
-      border-radius: 8px; 
-      cursor: pointer; 
-      font-size: 16px; 
-      flex: 1; 
-      min-width: 120px; 
-    }
    .import-label { 
       display: inline-block; 
       padding: 14px 0; 
@@ -155,19 +144,33 @@
       min-height: 50px; 
       box-sizing: border-box; 
     }
-   .bottom-actions { 
-      position: fixed; 
-      bottom: 0; 
-      left: 0; 
-      right: 0; 
-      padding: 15px; 
-      background: white; 
-      border-top: 1px solid #eee; 
-      display: flex; 
-      justify-content: center; 
-      gap: 10px; 
-      z-index: 10; 
-    }
+  /* 底部操作栏容器：弹性布局 + 自动换行 + 间距控制 */
+.bottom-actions {
+  display: flex;          /* 开启弹性布局 */
+  flex-wrap: wrap;        /* 屏幕窄时自动换行 */
+  justify-content: space-around; /* 按钮均匀分布 */
+  gap: 8px;               /* 按钮之间的间距 */
+  padding: 10px;          /* 和页面边缘留空隙 */
+  box-sizing: border-box; /* 防止内边距撑大容器 */
+}
+
+/* 按钮样式：自适应宽度 + 防溢出 */
+.primary-btn {
+  flex: 1;                /* 按钮自动平分可用空间 */
+  min-width: 80px;        /* 最小宽度，避免太窄 */
+  max-width: 200px;       /* 最大宽度，避免太宽 */
+  padding: 10px 16px;     /* 内边距适中，可调整 */
+  font-size: 14px;        /* 字体缩小，适配小屏幕 */
+  white-space: nowrap;    /* 文字不换行 */
+  overflow: hidden;       /* 内容溢出时隐藏 */
+  text-overflow: ellipsis;/* 溢出文字显示省略号 */
+  /* 保留原有按钮的颜色、圆角等视觉样式（如果有） */
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
    .scroll-btn { 
       position: fixed; 
       width: 50px; 
