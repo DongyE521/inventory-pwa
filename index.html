@@ -570,37 +570,37 @@ function addNewItem() {
     let codeAutoFilled = false;
     let specAutoFilled = false;
 
-    // 料号输入：防抖 500ms + 直接更新 inventory
-    codeInput.addEventListener("input", debounce(function() {
-      const code = this.innerText.trim();
-      if (!codeAutoFilled && materialMap[code] && rowIndex > -1) {
-        // 直接更新 inventory 数据
+    // 优化后：料号输入按回车键触发识别
+codeInput.addEventListener("keypress", function(e) {
+  if (e.key === "Enter") { // 仅回车键触发
+    const code = this.innerText.trim();
+    if (materialMap[code]) {
+      // 直接更新 inventory 数据（关键：保证数据同步）
+      inventory[rowIndex].name = materialMap[code].name;
+      inventory[rowIndex].spec = materialMap[code].spec;
+      renderTable(); // 重新渲染表格
+      showTip(`已自动填充料号「${code}」的信息`);
+    }
+  }
+});
+
+// 优化后：型号输入按回车键触发识别
+specInput.addEventListener("keypress", function(e) {
+  if (e.key === "Enter") { // 仅回车键触发
+    const spec = this.innerText.trim().toLowerCase();
+    for (const code in materialMap) {
+      // 严格匹配完整型号，避免部分匹配
+      if (materialMap[code].spec.toLowerCase() === spec) {
+        inventory[rowIndex].code = code;
         inventory[rowIndex].name = materialMap[code].name;
         inventory[rowIndex].spec = materialMap[code].spec;
-        codeAutoFilled = true; 
-        showTip(`已自动填充料号「${code}」的信息`);
-        renderTable(); // 重新渲染保证数据同步
+        renderTable(); // 重新渲染表格
+        showTip(`已根据型号匹配料号「${code}」`);
+        break;
       }
-    }, 500));
-
-    // 型号输入：防抖 500ms + 直接更新 inventory
-    specInput.addEventListener("input", debounce(function() {
-      const spec = this.innerText.trim().toLowerCase();
-      if (!specAutoFilled && rowIndex > -1) {
-        for (const code in materialMap) {
-          if (materialMap[code].spec.toLowerCase().includes(spec)) {
-            // 直接更新 inventory 数据
-            inventory[rowIndex].code = code;
-            inventory[rowIndex].name = materialMap[code].name;
-            inventory[rowIndex].spec = materialMap[code].spec;
-            specAutoFilled = true; 
-            showTip(`已根据型号匹配料号「${code}」`);
-            renderTable(); // 重新渲染保证数据同步
-            break;
-          }
-        }
-      }
-    }, 500));
+    }
+  }
+});
 
     // 手动修改名称时取消标记
     nameInput.addEventListener("input", function() {
