@@ -414,6 +414,16 @@
   </script>
   <!-- 核心功能脚本 -->
   <script>
+    // 防抖函数：延迟执行，避免频繁触发
+      function debounce(func, delay) {
+        let timer;
+        return function() {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            func.apply(this, arguments);
+          }, delay);
+        };
+      }
     // 全局变量：物料库与盘点数据完全分离
     let inventory = JSON.parse(localStorage.getItem("inventory")) || []; // 盘点清单数据
     let materialMap = JSON.parse(localStorage.getItem("materialMap")) || {}; // 物料库（单独存储）
@@ -549,32 +559,34 @@
         let codeAutoFilled = false;
         let specAutoFilled = false;
 
-        // 监听料号输入：首次匹配时填充
-        codeInput.addEventListener("input", function() {
-          const code = this.innerText.trim();
-          if (!codeAutoFilled && materialMap[code]) {
-            nameInput.innerText = materialMap[code].name;
-            specInput.innerText = materialMap[code].spec;
-            codeAutoFilled = true; // 标记为已填充
-            showTip(`已自动填充料号「${code}」的信息`);
-          }
-        });
-
-        // 监听型号输入：首次匹配时填充
-        specInput.addEventListener("input", function() {
-          const spec = this.innerText.trim().toLowerCase();
-          if (!specAutoFilled) {
-            for (const code in materialMap) {
-              if (materialMap[code].spec.toLowerCase().includes(spec)) {
-                codeInput.innerText = code;
-                nameInput.innerText = materialMap[code].name;
-                specAutoFilled = true; // 标记为已填充
-                showTip(`已根据型号匹配料号「${code}」`);
-                break;
+        // 监听料号输入：延迟检查，避免输入中误触发
+          codeInput.addEventListener("input", debounce(function() {
+            const code = this.innerText.trim();
+            // 若未自动填充过，且物料库有匹配，才填充
+            if (!codeAutoFilled && materialMap[code]) {
+              nameInput.innerText = materialMap[code].name;
+              specInput.innerText = materialMap[code].spec;
+              codeAutoFilled = true; // 标记为已填充，后续输入不触发
+              showTip(`已自动填充料号「${code}」的信息`);
+            }
+          }, 500)); // 延迟500毫秒检查，确保输入完成
+          
+          // 监听型号输入：延迟检查
+          specInput.addEventListener("input", debounce(function() {
+            const spec = this.innerText.trim().toLowerCase();
+            // 若未自动填充过，且找到匹配型号
+            if (!specAutoFilled) {
+              for (const code in materialMap) {
+                if (materialMap[code].spec.toLowerCase().includes(spec)) {
+                  codeInput.innerText = code;
+                  nameInput.innerText = materialMap[code].name;
+                  specAutoFilled = true; // 标记为已填充
+                  showTip(`已根据型号匹配料号「${code}」`);
+                  break;
+                }
               }
             }
-          }
-        });
+          }, 500)); // 延迟500毫秒
 
         // 手动修改名称时取消自动填充标记
         nameInput.addEventListener("input", function() {
