@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="库存盘点">
   <link rel="apple-touch-icon" href="icon.png">
-  <!-- 外部资源，新增FileSaver.js用于文件保存 -->
+  <!-- 外部资源 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <!-- 核心样式 -->
@@ -20,7 +20,7 @@
       font-family: Arial, sans-serif; 
       padding: 10px; 
       margin: 0; 
-      padding-bottom: 160px; 
+      padding-bottom: 200px; /* 底部留白，避免内容被遮挡 */
       -webkit-overflow-scrolling: touch; 
     }
    .browser-guide { 
@@ -91,17 +91,26 @@
       border-radius: 4px; 
       cursor: pointer; 
     }
+    /* 底部按钮统一样式 */
    .import-label { 
-      display: inline-block; 
-      padding: 14px 0; 
+      flex: 1; 
+      min-width: 0; 
+      max-width: none; 
+      height: 48px; 
+      padding: 0 8px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      font-size: clamp(12px, 3vw, 14px); 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
       background: #1890ff; 
       color: white; 
       border-radius: 8px; 
       cursor: pointer; 
-      font-size: 16px; 
-      flex: 1; 
-      min-width: 120px; 
       text-align: center; 
+      box-sizing: border-box; 
     }
     #fileInput, #batchFileInput { 
       display: none; 
@@ -122,12 +131,13 @@
       font-size: 15px; 
       margin-right: 10px; 
     }
+    /* 搜索栏样式 */
    .search-bar { 
       position: fixed; 
-      bottom: 100px; 
+      bottom: 68px; 
       left: 0; 
       right: 0; 
-      padding: 15px; 
+      padding: 10px 15px; 
       background: white; 
       border-top: 1px solid #eee; 
       display: flex; 
@@ -137,40 +147,52 @@
     }
    .search-bar input { 
       width: calc(100% - 40px); 
-      padding: 14px 15px; 
+      padding: 12px 15px; 
       border: 1px solid #ddd; 
       border-radius: 8px; 
-      font-size: 16px; 
-      min-height: 50px; 
+      font-size: 15px; 
+      min-height: 45px; 
       box-sizing: border-box; 
     }
-  /* 底部操作栏容器：弹性布局 + 自动换行 + 间距控制 */
-.bottom-actions {
-  display: flex;          /* 开启弹性布局 */
-  flex-wrap: wrap;        /* 屏幕窄时自动换行 */
-  justify-content: space-around; /* 按钮均匀分布 */
-  gap: 8px;               /* 按钮之间的间距 */
-  padding: 10px;          /* 和页面边缘留空隙 */
-  box-sizing: border-box; /* 防止内边距撑大容器 */
-}
-
-/* 按钮样式：自适应宽度 + 防溢出 */
-.primary-btn {
-  flex: 1;                /* 按钮自动平分可用空间 */
-  min-width: 80px;        /* 最小宽度，避免太窄 */
-  max-width: 200px;       /* 最大宽度，避免太宽 */
-  padding: 10px 16px;     /* 内边距适中，可调整 */
-  font-size: 14px;        /* 字体缩小，适配小屏幕 */
-  white-space: nowrap;    /* 文字不换行 */
-  overflow: hidden;       /* 内容溢出时隐藏 */
-  text-overflow: ellipsis;/* 溢出文字显示省略号 */
-  /* 保留原有按钮的颜色、圆角等视觉样式（如果有） */
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
+    /* 底部操作栏容器 */
+   .bottom-actions { 
+      display: flex; 
+      flex-wrap: nowrap; 
+      justify-content: space-between; 
+      align-items: center; 
+      gap: 8px; 
+      padding: 10px; 
+      background: white; 
+      border-top: 1px solid #eee; 
+      box-sizing: border-box; 
+      position: fixed; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      z-index: 10; 
+    }
+    /* 底部按钮样式 */
+   .primary-btn { 
+      flex: 1; 
+      min-width: 0; 
+      max-width: none; 
+      height: 48px; 
+      padding: 0 8px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      font-size: clamp(12px, 3vw, 14px); 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      background-color: #1890ff; 
+      color: white; 
+      border: none; 
+      border-radius: 8px; 
+      cursor: pointer; 
+      box-sizing: border-box; 
+    }
+        /* 滚动按钮 */
    .scroll-btn { 
       position: fixed; 
       width: 50px; 
@@ -196,7 +218,9 @@
       bottom: 115px; 
       right: 15px; 
     }
+    /* 导出相关样式（已隐藏预览框） */
    .csv-container { 
+      display: none; /* 隐藏预览框 */
       background: #f8f9fa; 
       border: 1px solid #ddd; 
       border-radius: 6px; 
@@ -209,6 +233,7 @@
       white-space: pre-wrap; 
     }
    .copy-btn { 
+      display: none; /* 隐藏复制按钮 */
       background: #52c41a; 
       color: white; 
       border: none; 
@@ -218,6 +243,7 @@
       font-size: 15px; 
       margin: 10px 0; 
     }
+    /* 提示消息框 */
    .tip { 
       position: fixed; 
       top: 20px; 
@@ -234,6 +260,7 @@
       max-width: 80%; 
       text-align: center; 
     }
+    /* 弹窗样式 */
    .modal { 
       position: fixed; 
       top: 0; 
@@ -287,7 +314,7 @@
       color: white; 
     }
     #exportArea { 
-      display: none; 
+      display: none; /* 彻底隐藏导出预览区域 */
     }
   </style>
 </head>
@@ -335,12 +362,12 @@
     <input type="text" id="searchInput" placeholder="搜索物料编号/名称/规格...">
   </div>
   
+  <!-- 底部操作按钮 -->
   <div class="bottom-actions">
     <label for="fileInput" class="import-label">重新导入</label>
     <input type="file" id="fileInput" accept=".csv">
     <button class="primary-btn" onclick="showFormatModal()">导出文件</button>
     <button class="primary-btn" onclick="addNewItem()">新增物料</button>
-    <!-- 新增撤回按钮 -->
     <button class="primary-btn" onclick="undoLastAction()">撤回上一步</button>
   </div>
   
@@ -370,17 +397,19 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js', { scope: './' })
-  .then(reg => console.log("Service Worker 注册成功", reg))
-  .catch(err => console.log("Service Worker 注册失败", err));
+         .then(reg => console.log("Service Worker 注册成功", reg))
+         .catch(err => console.log("Service Worker 注册失败", err));
       });
     }
   </script>
-  <!-- 核心功能脚本（第一部分） -->
+    <!-- 核心功能脚本 -->
   <script>
-    // 全局变量
+    // 全局变量（确保操作历史在最顶部初始化）
     let inventory = JSON.parse(localStorage.getItem("inventory")) || [];
+    let operationHistory = []; // 存储操作历史（用于撤回功能）
     let currentSearchKeyword = "";
     let pendingImportFile = null;
+
     // DOM 元素缓存
     const tbody = document.querySelector("#inventoryTable tbody");
     const totalCountEl = document.getElementById("totalCount");
@@ -391,6 +420,7 @@
     const exportArea = document.getElementById("exportArea");
     const exportFormat = document.getElementById("exportFormat");
     const formatModal = document.getElementById("formatModal");
+
     // 页面初始化
     document.addEventListener('DOMContentLoaded', function() {
       renderTable();
@@ -400,11 +430,13 @@
       document.getElementById("batchFileInput").addEventListener("change", handleBatchImport);
       document.getElementById("fileInput").addEventListener("change", handleFullImport);
     });
+
     // 搜索功能
     function handleSearch(e) {
       currentSearchKeyword = e.target.value.toLowerCase().trim();
       renderTable();
     }
+
     // 渲染表格
     function renderTable() {
       let data = [...inventory];
@@ -432,10 +464,9 @@
           <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'name', this.innerText)">${item.name}</td>
           <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'spec', this.innerText)">${item.spec}</td>
           <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'sysQty', this.innerText)">${item.sysQty}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'realQty',
- this.innerText)">${item.realQty}</td>
+          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'realQty', this.innerText)">${item.realQty}</td>
           <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'location', this.innerText)">${item.location}</td>
-          <td>${item.duplicate ? '<span style="color:#f5222d;">重复</span>' : '正常'}</td>
+          <td>${item.duplicate? '<span style="color:#f5222d;">重复</span>' : '正常'}</td>
           <td><button class="delete-btn" onclick="deleteRow(${inventory.indexOf(item)})">删除</button></td>
         `;
         tbody.appendChild(row);
@@ -452,7 +483,7 @@
         if (field === 'code') {
           inventory[index].code = value;
           // 检查重复
-          const isDuplicate = inventory.some((item, i) => i !== index && item.code === value);
+          const isDuplicate = inventory.some((item, i) => i!== index && item.code === value);
           inventory[index].duplicate = isDuplicate;
         } else {
           inventory[index][field] = value;
@@ -464,41 +495,46 @@
       }
     }
 
-    // 删除物料行
+    // 删除物料行（记录操作历史）
     function deleteRow(index) {
-    const deletedItem = inventory[index];
-    inventory.splice(index, 1);
-    checkAllDuplicates();
-    // 记录删除操作
-    operationHistory.push({ type: 'delete', index: index, item: deletedItem }); 
-    renderTable();
-    showTip(`已删除「${deletedItem.name || '未命名物料'}」`);
+      const deletedItem = inventory[index];
+      if (!deletedItem) return; // 防止无效索引
+      inventory.splice(index, 1);
+      checkAllDuplicates();
+      // 记录删除操作到历史
+      operationHistory.push({ 
+        type: 'delete', 
+        index: index, 
+        item: deletedItem 
+      }); 
+      renderTable();
+      showTip(`已删除「${deletedItem.name || '未命名物料'}」`);
     }
 
-    // 新增新增undoLastAction函数实现撤回功能
-function undoLastAction() {
-    if (operationHistory.length > 0) {
-        const lastOperation = operationHistory.pop();
-        if (lastOperation.type === 'delete') {
-            inventory.splice(lastOperation.index, 0, lastOperation.item);
-            checkAllDuplicates();
-            renderTable();
-            showTip(`已撤回删除操作，恢复「${lastOperation.item.name || '未命名物料'}」`);
-        }
+    // 撤回上一步操作
+    function undoLastAction() {
+      if (operationHistory.length === 0) {
+        showTip("没有可撤回的操作", "error");
+        return;
+      }
+      const lastOp = operationHistory.pop(); // 取出最后一次操作
+      if (lastOp.type === 'delete') {
+        // 将物料插回原位置
+        inventory.splice(lastOp.index, 0, lastOp.item); 
+        checkAllDuplicates();
+        localStorage.setItem("inventory", JSON.stringify(inventory));
+        renderTable();
+        showTip(`已恢复「${lastOp.item.name || '未命名物料'}」`);
+      }
     }
-}
 
     // 批量检查重复
     function checkAllDuplicates() {
       inventory.forEach((item, index) => {
-        const isDuplicate = inventory.some((other, i) => i !== index && other.code === item.code);
+        const isDuplicate = inventory.some((other, i) => i!== index && other.code === item.code);
         item.duplicate = isDuplicate;
       });
     }
-    
-    // 存储操作历史，每个操作记录包含操作类型（如'delete'）和相关数据（如被删除物料的索引）
-    let operationHistory = []; 
-    
 
     // 新增物料
     function addNewItem() {
@@ -531,33 +567,31 @@ function undoLastAction() {
       formatModal.style.display = "none";
     }
 
-    // 确认导出格式（优化：直接导出文件，去掉预览框）
-function confirmExportFormat() {
-    const format = exportFormat.value;
-    closeFormatModal(); // 假设你有关闭弹窗的函数，没有就删掉
-    if (format === "csv") {
-        const content = generateCSV(); // 假设你有 generateCSV 函数生成 CSV 内容
+    // 确认导出格式（直接导出，无预览）
+    function confirmExportFormat() {
+      const format = exportFormat.value;
+      closeFormatModal();
+      if (format === "csv") {
+        const content = generateCSV();
         const fileName = prompt('请输入文件名（默认：库存盘点.csv）', '库存盘点.csv');
         if (fileName) {
-            // 下载 CSV 的逻辑（需要你有 triggerDownload 函数，或用下面的原生下载方式）
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = fileName;
-            link.click();
-            URL.revokeObjectURL(link.href);
-            showTip("已导出CSV文件");
+          // 原生下载CSV
+          const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = fileName;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          showTip("已导出CSV文件");
         }
-    } else {
-        // 调用上面新增的弹窗函数
+      } else {
+        // 弹出Excel文件名输入框
         showFileNameModal();
+      }
     }
-}
 
-
-    // 新增：文件名输入弹窗
+    // 文件名输入弹窗（Excel导出专用）
     function showFileNameModal() {
-      // 创建弹窗元素
       const fileNameModal = document.createElement("div");
       fileNameModal.className = "modal";
       fileNameModal.innerHTML = `
@@ -567,13 +601,13 @@ function confirmExportFormat() {
                  value="库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}">
           <div class="modal-buttons">
             <button class="modal-btn modal-cancel" onclick="document.body.removeChild(this.closest('.modal'))">取消</button>
-            <button class="modal-btn modal-confirm" onclick="confirmFileName('${fileNameModal}')">确认</button>
+            <button class="modal-btn modal-confirm">确认</button>
           </div>
         </div>
       `;
       document.body.appendChild(fileNameModal);
       fileNameModal.style.display = "flex";
-      // 绑定确认按钮事件（修正DOM引用）
+      // 绑定确认按钮事件
       fileNameModal.querySelector(".modal-confirm").onclick = function() {
         const fileName = fileNameModal.querySelector("#fileNameInput").value.trim() || 
                         `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}`;
@@ -582,7 +616,7 @@ function confirmExportFormat() {
       };
     }
 
-    // 生成CSV内容（关键优化：移除序号列）
+    // 生成CSV内容
     function generateCSV() {
       function escapeCsvValue(value) {
         if (!value) return "";
@@ -607,7 +641,7 @@ function confirmExportFormat() {
       return csv;
     }
 
-    // 导出为Excel（新增：接收自定义文件名）
+    // 导出为Excel
     function exportToExcel(fileName) {
       const ws = XLSX.utils.json_to_sheet(inventory.map((item, index) => ({
         序号: index + 1,
@@ -620,102 +654,13 @@ function confirmExportFormat() {
       })));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "库存盘点");
-      // 生成二进制文件并下载
+      // 生成文件并下载
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${fileName}.xlsx`);
       showTip(`已生成Excel文件：${fileName}.xlsx`);
     }
 
-
-     // 新增：文件名输入弹窗（放到 <script> 标签内，和其他函数同级）
-function showFileNameModal() {
-    // 创建弹窗元素
-    const fileNameModal = document.createElement("div");
-    fileNameModal.className = "modal";
-    fileNameModal.innerHTML = `
-        <div class="modal-content">
-            <p class="modal-title">输入文件名</p>
-            <input type="text" id="fileNameInput" class="modal-select" 
-                   value="库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}">
-            <div class="modal-buttons">
-                <button class="modal-btn modal-cancel" onclick="document.body.removeChild(this.closest('.modal'))">取消</button>
-                <button class="modal-btn modal-confirm" onclick="confirmFileName('${fileNameModal}')">确认</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(fileNameModal);
-    fileNameModal.style.display = "flex";
-    // 绑定确认按钮事件（修正DOM引用）
-    fileNameModal.querySelector(".modal-confirm").onclick = function() {
-        const fileName = fileNameModal.querySelector("#fileNameInput").value.trim() || 
-                        `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}`;
-        exportToExcel(fileName);
-        document.body.removeChild(fileNameModal);
-    };
-}
-
-
-    // 触发文件下载
-    function triggerDownload(content, fileName, mimeType) {
-      try {
-        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-        const blob = new Blob([bom, content], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-      } catch (err) {
-        showTip("下载已准备，请手动复制内容保存", "error");
-      }
-    }
-
-    // 复制到剪贴板
-    function copyToClipboard() {
-      const text = csvContentEl.textContent;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
-          showTip("内容已复制到剪贴板");
-        }).catch(() => fallbackCopy(text));
-      } else {
-        fallbackCopy(text);
-      }
-    }
-
-    function fallbackCopy(text) {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.style.position = "fixed";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-      showTip("内容已复制到剪贴板");
-    }
-    
-    // 导出为Excel（接收自定义文件名，放到 <script> 标签内）
-function exportToExcel(fileName) {
-    const ws = XLSX.utils.json_to_sheet(inventory.map((item, index) => ({
-        序号: index + 1,
-        物料编号: item.code,
-        物料名称: item.name,
-        规格: item.spec,
-        系统数量: item.sysQty,
-        实际数量: item.realQty,
-        存放位置: item.location
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "库存盘点");
-    // 生成二进制文件并下载
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${fileName}.xlsx`);
-    showTip(`已生成Excel文件：${fileName}.xlsx`);
-}
-
-    // 批量追加导入（兼容含序号列的CSV）
+    // 批量追加导入
     function handleBatchImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -732,7 +677,7 @@ function exportToExcel(fileName) {
           lines.forEach((line, i) => {
             const cols = line.split(",").map(c => c.trim());
             if (i === 0 && (cols[0] === "序号" || cols[0] === "物料编号")) return;
-            const dataCols = cols.length === 7 ? cols.slice(1) : cols;
+            const dataCols = cols.length === 7? cols.slice(1) : cols;
             if (dataCols.length >= 6) {
               const [code, name, spec, sysQty, realQty, location] = dataCols;
               const existingIndex = inventory.findIndex(item => item.code === code);
@@ -804,7 +749,7 @@ function exportToExcel(fileName) {
           lines.forEach((line, i) => {
             const cols = line.split(",").map(c => c.trim());
             if (i === 0 && (cols[0] === "序号" || cols[0] === "物料编号")) return;
-            const dataCols = cols.length === 7 ? cols.slice(1) : cols;
+            const dataCols = cols.length === 7? cols.slice(1) : cols;
             if (dataCols.length >= 6) {
               const [code, name, spec, sysQty, realQty, location] = dataCols;
               const duplicateInFile = inventory.some(item => item.code === code);
@@ -830,7 +775,7 @@ function exportToExcel(fileName) {
     // 更新统计信息
     function updateSummary() {
       totalCountEl.textContent = inventory.length;
-      const counted = inventory.filter(item => item.realQty !== "" &&!isNaN(item.realQty)).length;
+      const counted = inventory.filter(item => item.realQty!== "" &&!isNaN(item.realQty)).length;
       countedCountEl.textContent = counted;
     }
 
@@ -849,3 +794,4 @@ function exportToExcel(fileName) {
   </script>
 </body>
 </html>
+  
