@@ -530,7 +530,7 @@
       }
     }
 
-    // 新增物料（优化后：防抖 + 直接更新 inventory 数据）
+    // 新增物料（手机端优化：1.5秒延迟识别）
 function addNewItem() {
   const newId = `WL${Date.now().toString().slice(-6)}`; 
   const newItem = {
@@ -543,26 +543,15 @@ function addNewItem() {
     duplicate: false
   };
   inventory.push(newItem);
-  renderTable(); // 先渲染，保证能找到行索引
-  showTip("新增物料行：输入料号/型号可自动填充信息");
+  renderTable(); // 先渲染，确保行索引正确
+  showTip("新增物料行：输入料号/型号后稍等自动填充");
   scrollToBottom();
 
-  // 防抖函数（全局已定义）
-  function debounce(func, delay) {
-    let timer;
-    return function() {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        func.apply(this, arguments);
-      }, delay);
-    };
-  }
-
-  // 监听新增行的输入事件（优化：用防抖 + 直接更新 inventory）
+  // 监听新增行的输入事件（手机端适配）
   setTimeout(() => {
     const rows = tbody.querySelectorAll("tr");
     const lastRow = rows[rows.length - 1];
-    const rowIndex = Array.from(rows).indexOf(lastRow); // 关键：获取 inventory 索引
+    const rowIndex = Array.from(rows).indexOf(lastRow); // 获取当前行索引
     const codeInput = lastRow.querySelector("td:nth-child(2)"); 
     const nameInput = lastRow.querySelector("td:nth-child(3)"); 
     const specInput = lastRow.querySelector("td:nth-child(4)"); 
@@ -570,39 +559,42 @@ function addNewItem() {
     let codeAutoFilled = false;
     let specAutoFilled = false;
 
-    // 优化后：料号输入按回车键触发识别
-codeInput.addEventListener("keypress", function(e) {
-  if (e.key === "Enter") { // 仅回车键触发
-    const code = this.innerText.trim();
-    if (materialMap[code]) {
-      // 直接更新 inventory 数据（关键：保证数据同步）
-      inventory[rowIndex].name = materialMap[code].name;
-      inventory[rowIndex].spec = materialMap[code].spec;
-      renderTable(); // 重新渲染表格
-      showTip(`已自动填充料号「${code}」的信息`);
-    }
-  }
-});
-
-// 优化后：型号输入按回车键触发识别
-specInput.addEventListener("keypress", function(e) {
-  if (e.key === "Enter") { // 仅回车键触发
-    const spec = this.innerText.trim().toLowerCase();
-    for (const code in materialMap) {
-      // 严格匹配完整型号，避免部分匹配
-      if (materialMap[code].spec.toLowerCase() === spec) {
-        inventory[rowIndex].code = code;
+    // 料号输入：1.5秒无操作后触发 + 长度≥3才识别（避免短字符误触发）
+    codeInput.addEventListener("input", debounce(function() {
+      const code = codeInput.innerText.trim();
+      // 手机端优化：料号至少输入3个字符才尝试匹配
+      if (!codeAutoFilled && code.length >= 3 && materialMap[code] && rowIndex > -1) {
         inventory[rowIndex].name = materialMap[code].name;
         inventory[rowIndex].spec = materialMap[code].spec;
-        renderTable(); // 重新渲染表格
-        showTip(`已根据型号匹配料号「${code}」`);
-        break;
+        codeAutoFilled = true; // 只填充一次，避免重复触发
+        localStorage.setItem("inventory", JSON.stringify(inventory));
+        renderTable(); // 重新渲染确保显示
+        showTip(`已自动填充料号「${code}」`);
       }
-    }
-  }
-});
+    }, 1500)); // 1.5秒延迟
 
-    // 手动修改名称时取消标记
+    // 型号输入：1.5秒无操作后触发 + 长度≥2才识别
+    specInput.addEventListener("input", debounce(function() {
+      const spec = specInput.innerText.trim().toLowerCase();
+      // 手机端优化：型号至少输入2个字符才尝试匹配
+      if (!specAutoFilled && spec.length >= 2 && rowIndex > -1) {
+        for (const code in materialMap) {
+          // 严格匹配型号（全包含而非部分匹配）
+          if (materialMap[code].spec.toLowerCase().includes(spec)) {
+            inventory[rowIndex].code = code;
+            inventory[rowIndex].name = materialMap[code].name;
+            inventory[rowIndex].spec = materialMap[code].spec;
+            specAutoFilled = true; // 只填充一次
+            localStorage.setItem("inventory", JSON.stringify(inventory));
+            renderTable(); // 重新渲染确保显示
+            showTip(`已匹配型号「${spec}」→ 料号「${code}」`);
+            break;
+          }
+        }
+      }
+    }, 1500)); // 1.5秒延迟
+
+    // 手动修改名称时，取消自动填充标记（避免覆盖手动输入）
     nameInput.addEventListener("input", function() {
       codeAutoFilled = true;
       specAutoFilled = true;
