@@ -530,71 +530,85 @@
       }
     }
 
-    // 新增物料（支持自动填充）
-    function addNewItem() {
-      const newId = `WL${Date.now().toString().slice(-6)}`; // 生成临时料号
-      const newItem = {
-        code: newId,
-        name: "",
-        spec: "",
-        sysQty: "0",
-        realQty: "",
-        location: "",
-        duplicate: false
-      };
-      inventory.push(newItem);
-      renderTable();
-      showTip("新增物料行：输入料号/型号可自动填充信息");
-      scrollToBottom();
+    // 新增物料（优化后：防抖 + 直接更新 inventory 数据）
+function addNewItem() {
+  const newId = `WL${Date.now().toString().slice(-6)}`; 
+  const newItem = {
+    code: newId,
+    name: "",
+    spec: "",
+    sysQty: "0",
+    realQty: "",
+    location: "",
+    duplicate: false
+  };
+  inventory.push(newItem);
+  renderTable(); // 先渲染，保证能找到行索引
+  showTip("新增物料行：输入料号/型号可自动填充信息");
+  scrollToBottom();
 
-      // 监听新增行的输入事件（实现自动填充）
-      setTimeout(() => {
-        const rows = tbody.querySelectorAll("tr");
-        const lastRow = rows[rows.length - 1];
-        const codeInput = lastRow.querySelector("td:nth-child(2)"); // 料号列
-        const nameInput = lastRow.querySelector("td:nth-child(3)"); // 名称列
-        const specInput = lastRow.querySelector("td:nth-child(4)"); // 型号列
+  // 防抖函数（全局已定义）
+  function debounce(func, delay) {
+    let timer;
+    return function() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        func.apply(this, arguments);
+      }, delay);
+    };
+  }
 
-        // 标记是否已自动填充（避免覆盖手动输入）
-        let codeAutoFilled = false;
-        let specAutoFilled = false;
+  // 监听新增行的输入事件（优化：用防抖 + 直接更新 inventory）
+  setTimeout(() => {
+    const rows = tbody.querySelectorAll("tr");
+    const lastRow = rows[rows.length - 1];
+    const rowIndex = Array.from(rows).indexOf(lastRow); // 关键：获取 inventory 索引
+    const codeInput = lastRow.querySelector("td:nth-child(2)"); 
+    const nameInput = lastRow.querySelector("td:nth-child(3)"); 
+    const specInput = lastRow.querySelector("td:nth-child(4)"); 
 
-        // 监听料号输入：延迟检查，避免输入中误触发
-          codeInput.addEventListener("input", debounce(function() {
-            const code = this.innerText.trim();
-            // 若未自动填充过，且物料库有匹配，才填充
-            if (!codeAutoFilled && materialMap[code]) {
-              nameInput.innerText = materialMap[code].name;
-              specInput.innerText = materialMap[code].spec;
-              codeAutoFilled = true; // 标记为已填充，后续输入不触发
-              showTip(`已自动填充料号「${code}」的信息`);
-            }
-          }, 500)); // 延迟500毫秒检查，确保输入完成
-          
-          // 监听型号输入：延迟检查
-          specInput.addEventListener("input", debounce(function() {
-            const spec = this.innerText.trim().toLowerCase();
-            // 若未自动填充过，且找到匹配型号
-            if (!specAutoFilled) {
-              for (const code in materialMap) {
-                if (materialMap[code].spec.toLowerCase().includes(spec)) {
-                  codeInput.innerText = code;
-                  nameInput.innerText = materialMap[code].name;
-                  specAutoFilled = true; // 标记为已填充
-                  showTip(`已根据型号匹配料号「${code}」`);
-                  break;
-                }
-              }
-            }
-          }, 500)); // 延迟500毫秒
+    let codeAutoFilled = false;
+    let specAutoFilled = false;
 
-        // 手动修改名称时取消自动填充标记
-        nameInput.addEventListener("input", function() {
-          codeAutoFilled = true;
-          specAutoFilled = true;
-        });
-      }, 100);
-    }
+    // 料号输入：防抖 500ms + 直接更新 inventory
+    codeInput.addEventListener("input", debounce(function() {
+      const code = this.innerText.trim();
+      if (!codeAutoFilled && materialMap[code] && rowIndex > -1) {
+        // 直接更新 inventory 数据
+        inventory[rowIndex].name = materialMap[code].name;
+        inventory[rowIndex].spec = materialMap[code].spec;
+        codeAutoFilled = true; 
+        showTip(`已自动填充料号「${code}」的信息`);
+        renderTable(); // 重新渲染保证数据同步
+      }
+    }, 500));
+
+    // 型号输入：防抖 500ms + 直接更新 inventory
+    specInput.addEventListener("input", debounce(function() {
+      const spec = this.innerText.trim().toLowerCase();
+      if (!specAutoFilled && rowIndex > -1) {
+        for (const code in materialMap) {
+          if (materialMap[code].spec.toLowerCase().includes(spec)) {
+            // 直接更新 inventory 数据
+            inventory[rowIndex].code = code;
+            inventory[rowIndex].name = materialMap[code].name;
+            inventory[rowIndex].spec = materialMap[code].spec;
+            specAutoFilled = true; 
+            showTip(`已根据型号匹配料号「${code}」`);
+            renderTable(); // 重新渲染保证数据同步
+            break;
+          }
+        }
+      }
+    }, 500));
+
+    // 手动修改名称时取消标记
+    nameInput.addEventListener("input", function() {
+      codeAutoFilled = true;
+      specAutoFilled = true;
+    });
+  }, 100);
+}
 
     // 删除物料行
     function deleteRow(index) {
