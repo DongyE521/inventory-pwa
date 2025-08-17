@@ -332,12 +332,6 @@
     <input type="text" id="searchInput" placeholder="搜索物料编号/名称/规格...">
   </div>
   
-  <!-- 导出内容区域 -->
-  <div id="exportArea">
-    <div class="csv-container" id="csvContent"></div>
-    <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">复制内容到剪贴板</button>
-  </div>
-  
   <!-- 底部操作按钮 -->
   <div class="bottom-actions">
     <label for="fileInput" class="import-label">重新导入</label>
@@ -514,22 +508,29 @@
       formatModal.style.display = "none";
     }
 
-    // 确认导出格式（优化：导出CSV不含序号列）
-    function confirmExportFormat() {
-      const format = exportFormat.value;
-      closeFormatModal();
-      if (format === "csv") {
-        const content = generateCSV();
-        csvContentEl.textContent = content;
-        exportArea.style.display = "block";
-        exportArea.scrollIntoView({ behavior: "smooth", block: "center" });
-        triggerDownload(content, `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}.csv`, "text/csv;charset=utf-8");
-        showTip("已生成CSV格式内容");
-      } else {
-        // 新增：弹出文件名输入弹窗
+    // 确认导出格式（优化：直接导出文件，去掉预览框）
+function confirmExportFormat() {
+    const format = exportFormat.value;
+    closeFormatModal(); // 假设你有关闭弹窗的函数，没有就删掉
+    if (format === "csv") {
+        const content = generateCSV(); // 假设你有 generateCSV 函数生成 CSV 内容
+        const fileName = prompt('请输入文件名（默认：库存盘点.csv）', '库存盘点.csv');
+        if (fileName) {
+            // 下载 CSV 的逻辑（需要你有 triggerDownload 函数，或用下面的原生下载方式）
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            showTip("已导出CSV文件");
+        }
+    } else {
+        // 调用上面新增的弹窗函数
         showFileNameModal();
-      }
     }
+}
+
 
     // 新增：文件名输入弹窗
     function showFileNameModal() {
@@ -602,6 +603,35 @@
       showTip(`已生成Excel文件：${fileName}.xlsx`);
     }
 
+
+     // 新增：文件名输入弹窗（放到 <script> 标签内，和其他函数同级）
+function showFileNameModal() {
+    // 创建弹窗元素
+    const fileNameModal = document.createElement("div");
+    fileNameModal.className = "modal";
+    fileNameModal.innerHTML = `
+        <div class="modal-content">
+            <p class="modal-title">输入文件名</p>
+            <input type="text" id="fileNameInput" class="modal-select" 
+                   value="库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}">
+            <div class="modal-buttons">
+                <button class="modal-btn modal-cancel" onclick="document.body.removeChild(this.closest('.modal'))">取消</button>
+                <button class="modal-btn modal-confirm" onclick="confirmFileName('${fileNameModal}')">确认</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(fileNameModal);
+    fileNameModal.style.display = "flex";
+    // 绑定确认按钮事件（修正DOM引用）
+    fileNameModal.querySelector(".modal-confirm").onclick = function() {
+        const fileName = fileNameModal.querySelector("#fileNameInput").value.trim() || 
+                        `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}`;
+        exportToExcel(fileName);
+        document.body.removeChild(fileNameModal);
+    };
+}
+
+
     // 触发文件下载
     function triggerDownload(content, fileName, mimeType) {
       try {
@@ -642,6 +672,25 @@
       document.body.removeChild(textarea);
       showTip("内容已复制到剪贴板");
     }
+    
+    // 导出为Excel（接收自定义文件名，放到 <script> 标签内）
+function exportToExcel(fileName) {
+    const ws = XLSX.utils.json_to_sheet(inventory.map((item, index) => ({
+        序号: index + 1,
+        物料编号: item.code,
+        物料名称: item.name,
+        规格: item.spec,
+        系统数量: item.sysQty,
+        实际数量: item.realQty,
+        存放位置: item.location
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "库存盘点");
+    // 生成二进制文件并下载
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${fileName}.xlsx`);
+    showTip(`已生成Excel文件：${fileName}.xlsx`);
+}
 
     // 批量追加导入（兼容含序号列的CSV）
     function handleBatchImport(e) {
