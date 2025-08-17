@@ -332,12 +332,13 @@
     <input type="text" id="searchInput" placeholder="搜索物料编号/名称/规格...">
   </div>
   
-  <!-- 底部操作按钮 -->
   <div class="bottom-actions">
     <label for="fileInput" class="import-label">重新导入</label>
     <input type="file" id="fileInput" accept=".csv">
     <button class="primary-btn" onclick="showFormatModal()">导出文件</button>
     <button class="primary-btn" onclick="addNewItem()">新增物料</button>
+    <!-- 新增撤回按钮 -->
+    <button class="primary-btn" onclick="undoLastAction()">撤回上一步</button>
   </div>
   
   <!-- 滚动按钮 -->
@@ -462,12 +463,27 @@
 
     // 删除物料行
     function deleteRow(index) {
-      const deletedItem = inventory[index];
-      inventory.splice(index, 1);
-      checkAllDuplicates(); // 重新检查重复
-      renderTable();
-      showTip(`已删除「${deletedItem.name || '未命名物料'}」`);
+    const deletedItem = inventory[index];
+    inventory.splice(index, 1);
+    checkAllDuplicates();
+    // 记录删除操作
+    operationHistory.push({ type: 'delete', index: index, item: deletedItem }); 
+    renderTable();
+    showTip(`已删除「${deletedItem.name || '未命名物料'}」`);
     }
+
+    // 新增新增undoLastAction函数实现撤回功能
+function undoLastAction() {
+    if (operationHistory.length > 0) {
+        const lastOperation = operationHistory.pop();
+        if (lastOperation.type === 'delete') {
+            inventory.splice(lastOperation.index, 0, lastOperation.item);
+            checkAllDuplicates();
+            renderTable();
+            showTip(`已撤回删除操作，恢复「${lastOperation.item.name || '未命名物料'}」`);
+        }
+    }
+}
 
     // 批量检查重复
     function checkAllDuplicates() {
@@ -476,6 +492,10 @@
         item.duplicate = isDuplicate;
       });
     }
+    
+    // 存储操作历史，每个操作记录包含操作类型（如'delete'）和相关数据（如被删除物料的索引）
+    let operationHistory = []; 
+    
 
     // 新增物料
     function addNewItem() {
