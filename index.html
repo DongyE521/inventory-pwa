@@ -403,7 +403,32 @@
   
   <!-- 提示消息框 -->
   <div class="tip" id="tip"></div>
-    operationHistory = []; // 操作历史（用于撤回）
+    <!-- Service Worker 注册 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js', { scope: './' })
+         .then(reg => console.log("Service Worker 注册成功", reg))
+         .catch(err => console.log("Service Worker 注册失败", err));
+      });
+    }
+  </script>
+  <!-- 核心功能脚本 -->
+  <script>
+    // 防抖函数：延迟执行，避免频繁触发
+    function debounce(func, delay) {
+      let timer;
+      return function() {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          func.apply(this, arguments);
+        }, delay);
+      };
+    }
+    // 全局变量：物料库与盘点数据完全分离
+    let inventory = JSON.parse(localStorage.getItem("inventory")) || []; // 盘点清单数据
+    let materialMap = JSON.parse(localStorage.getItem("materialMap")) || {}; // 物料库（单独存储）
+    let operationHistory = []; // 操作历史（用于撤回）
     let currentSearchKeyword = "";
     let pendingImportFile = null;
 
@@ -617,7 +642,7 @@
         item.duplicate = isDuplicate;
       });
     }
-    // 物料库管理功能（优化：用 Papa Parse 解析）
+        // 物料库管理功能（优化：用 Papa Parse 解析）
     function handleMaterialLibImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -798,7 +823,7 @@
             
             localStorage.setItem("inventory", JSON.stringify(inventory));
             renderTable();
-            showTip(`重新导入完成：共${inventory.length}条盘点数据`);
+                        showTip(`重新导入完成：共${inventory.length}条盘点数据`);
           } catch (err) {
             showTip("导入失败，请检查格式", "error");
             console.error(err);
@@ -949,3 +974,4 @@
   </script>
 </body>
 </html>
+    
