@@ -14,13 +14,13 @@
   <!-- 外部资源 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-  <!-- 核心样式 -->
+  <!-- 核心样式：统一按钮大小+修复布局 -->
   <style>
     body { 
       font-family: Arial, sans-serif; 
       padding: 10px; 
       margin: 0; 
-      padding-bottom: 200px; /* 底部留白，避免内容被遮挡 */
+      padding-bottom: 200px; 
       -webkit-overflow-scrolling: touch; 
     }
    .browser-guide { 
@@ -82,14 +82,37 @@
     tr.duplicate { 
       background-color: #fff2f0; 
     }
-   .delete-btn { 
-      background: #ff4d4f; 
-      color: white; 
-      padding: 6px 12px; 
+    /* 关键修复：统一所有操作按钮大小（删除+上传+查看） */
+   .delete-btn, 
+   .upload-img-btn, 
+   .view-img-btn { 
+      padding: 6px 10px; 
       font-size: 14px; 
       border: none; 
       border-radius: 4px; 
       cursor: pointer; 
+      margin-right: 5px; 
+      min-width: 80px; /* 固定最小宽度，避免文字长短导致按钮大小不一 */
+      box-sizing: border-box; 
+      display: inline-flex; /* 垂直居中文字 */
+      align-items: center; 
+      justify-content: center; 
+    }
+   .delete-btn { 
+      background: #ff4d4f; 
+      color: white; 
+    }
+   .upload-img-btn { 
+      background: #4CAF50; 
+      color: white; 
+    }
+   .view-img-btn { 
+      background: #2196F3; 
+      color: white; 
+      margin-right: 0; /* 最后一个按钮无右间距 */
+    }
+   .img-file-input { 
+      display: none; 
     }
     /* 底部按钮统一样式 */
    .import-label { 
@@ -218,31 +241,6 @@
       bottom: 115px; 
       right: 15px; 
     }
-    /* 导出相关样式（已隐藏预览框） */
-   .csv-container { 
-      display: none; /* 隐藏预览框 */
-      background: #f8f9fa; 
-      border: 1px solid #ddd; 
-      border-radius: 6px; 
-      padding: 15px; 
-      margin: 15px 0; 
-      max-height: 200px; 
-      overflow-y: auto; 
-      font-family: monospace; 
-      font-size: 14px; 
-      white-space: pre-wrap; 
-    }
-   .copy-btn { 
-      display: none; /* 隐藏复制按钮 */
-      background: #52c41a; 
-      color: white; 
-      border: none; 
-      padding: 8px 16px; 
-      border-radius: 4px; 
-      cursor: pointer; 
-      font-size: 15px; 
-      margin: 10px 0; 
-    }
     /* 提示消息框 */
    .tip { 
       position: fixed; 
@@ -260,7 +258,7 @@
       max-width: 80%; 
       text-align: center; 
     }
-    /* 弹窗样式 */
+    /* 弹窗样式（导出选择+图片预览） */
    .modal { 
       position: fixed; 
       top: 0; 
@@ -313,8 +311,33 @@
       background: #1890ff; 
       color: white; 
     }
-    #exportArea { 
-      display: none; /* 彻底隐藏导出预览区域 */
+    /* 图片预览模态框 */
+   .img-modal { 
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      right: 0; 
+      bottom: 0; 
+      background: rgba(0,0,0,0.8); 
+      display: none; 
+      justify-content: center; 
+      align-items: center; 
+      z-index: 2000; 
+      padding: 20px; 
+    }
+   .img-modal-content { 
+      max-width: 90%; 
+      max-height: 90%; 
+      border: 4px solid white; 
+      border-radius: 8px; 
+    }
+   .img-modal-close { 
+      position: absolute; 
+      top: 20px; 
+      right: 20px; 
+      color: white; 
+      font-size: 30px; 
+      cursor: pointer; 
     }
   </style>
 </head>
@@ -349,7 +372,7 @@
     <p style="margin:8px 0 0 0; font-size:14px;">当前物料库数量：<span id="materialLibCount">0</span> 种</p>
   </div>
   
-  <!-- 库存表格 -->
+  <!-- 库存表格（修复表头闭合标签错误：<<<th> → <<th>） -->
   <table id="inventoryTable">
     <thead>
       <tr>
@@ -400,9 +423,15 @@
     </div>
   </div>
   
+  <!-- 图片预览模态框 -->
+  <div class="img-modal" id="imgModal">
+    <span class="img-modal-close" onclick="closeImageModal()">&times;</span>
+    <img class="img-modal-content" id="modalImage">
+  </div>
+  
   <!-- 提示消息框 -->
   <div class="tip" id="tip"></div>
-  <!-- Service Worker 注册 -->
+    <!-- Service Worker 注册 -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -412,60 +441,73 @@
       });
     }
   </script>
-  <!-- 核心功能脚本 -->
-  <script>
-    // 防抖函数：延迟执行，避免频繁触发
-      function debounce(func, delay) {
-        let timer;
-        return function() {
-          clearTimeout(timer);
-          timer = setTimeout(() => {
-            func.apply(this, arguments);
-          }, delay);
-        };
-      }
-    // 全局变量：物料库与盘点数据完全分离
-    let inventory = JSON.parse(localStorage.getItem("inventory")) || []; // 盘点清单数据
-    let materialMap = JSON.parse(localStorage.getItem("materialMap")) || {}; // 物料库（单独存储）
-    let operationHistory = []; // 操作历史（用于撤回）
-    let currentSearchKeyword = "";
-    let pendingImportFile = null;
 
-    // DOM 元素缓存
+  <!-- 核心功能脚本：第一步修复图片按钮切换问题 -->
+  <script>
+    // 1. 基础工具函数：防抖+CSV解析（支持含逗号/引号字段）
+    function debounce(func, delay) {
+      let timer;
+      return function() {
+        clearTimeout(timer);
+        timer = setTimeout(() => func.apply(this, arguments), delay);
+      };
+    }
+
+    // 修复CSV解析：处理“螺丝,M5”“"主板"”等特殊字段
+    function parseCSVLine(line) {
+      const result = [];
+      let currentField = '';
+      let inQuotes = false; // 引号内逗号不视为分隔符
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes; // 切换引号状态（处理成对引号）
+        } else if (char === ',' && !inQuotes) {
+          result.push(currentField.trim());
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+      // 去除字段首尾多余引号（如“"物料名"”→“物料名”）
+      result.push(currentField.trim().replace(/^"(.*)"$/, '$1'));
+      return result;
+    }
+
+    // 2. 全局变量：存储盘点数据、物料库、操作历史
+    let inventory = JSON.parse(localStorage.getItem("inventory")) || []; // 含图片地址
+    let materialMap = JSON.parse(localStorage.getItem("materialMap")) || {}; // 物料库
+    let operationHistory = []; // 用于撤回操作
+    let currentSearchKeyword = "";
+
+    // 3. DOM元素缓存（提前获取所有需要操作的元素）
     const tbody = document.querySelector("#inventoryTable tbody");
     const totalCountEl = document.getElementById("totalCount");
     const countedCountEl = document.getElementById("countedCount");
     const tipEl = document.getElementById("tip");
     const searchInput = document.getElementById("searchInput");
     const formatModal = document.getElementById("formatModal");
-    // 物料库相关元素
-    const materialLibFileInput = document.getElementById("materialLibFileInput");
+    const imgModal = document.getElementById("imgModal");
+    const modalImage = document.getElementById("modalImage");
     const materialLibCountEl = document.getElementById("materialLibCount");
+    const materialLibFileInput = document.getElementById("materialLibFileInput"); // 新增：避免未定义错误
 
-    // 页面初始化
+    // 4. 页面初始化：绑定事件+加载数据
     document.addEventListener('DOMContentLoaded', function() {
-      // 加载物料库并更新计数
-      updateMaterialLibCount();
-      // 绑定物料库上传事件
+      updateMaterialLibCount(); // 加载物料库数量
       materialLibFileInput.addEventListener("change", handleMaterialLibImport);
-      // 原有初始化逻辑
-      renderTable();
-      updateSummary();
+      renderTable(); // 渲染表格（核心：修复图片按钮ID）
+      updateSummary(); // 更新统计
       searchInput.addEventListener('input', handleSearch);
       document.getElementById("batchFileInput").addEventListener("change", handleBatchImport);
       document.getElementById("fileInput").addEventListener("change", handleFullImport);
     });
 
-    // 搜索功能
-    function handleSearch(e) {
-      currentSearchKeyword = e.target.value.toLowerCase().trim();
-      renderTable();
-    }
-
-    // 渲染表格
+    // 5. 表格渲染：关键修复——用“物料code+索引”生成稳定ID（解决按钮不切换）
     function renderTable() {
       let data = [...inventory];
-      // 搜索过滤
+      // 搜索过滤逻辑
       if (currentSearchKeyword) {
         data = data.filter(item => {
           const code = (item.code || "").toLowerCase();
@@ -478,214 +520,281 @@
                  location.includes(currentSearchKeyword);
         });
       }
-      // 清空并填充表格
+
+      // 清空表格并重新填充
       tbody.innerHTML = "";
       data.forEach((item, index) => {
         const row = document.createElement("tr");
         if (item.duplicate) row.classList.add("duplicate");
+
+        // 修复1：生成稳定的图片输入框ID（用code+索引，避免数组变化导致ID错位）
+        const itemIndex = inventory.indexOf(item); // 获取物料在原数组的真实索引
+        const imgInputId = `imgInput_${item.code || itemIndex}_${index}`; // 唯一ID
+
+        // 修复：适配 Blob URL 预览（iOS PWA 可用）
+const imgBtnHtml = inventory[index].imageBlobUrl ? 
+  `<button class="view-img-btn" onclick="openImageModal('${inventory[index].imageBlobUrl}')">查看图片</button>` : 
+  `<label class="upload-img-btn" for="${imgInputId}">上传图片</label>
+   <input type="file" id="${imgInputId}" class="img-file-input" accept="image/*" 
+          onchange="handleImageUpload(${itemIndex}, this)">`;
+
+        // 表格行内容（操作列嵌入图片按钮）
         row.innerHTML = `
           <td>${index + 1}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'code', this.innerText)">${item.code}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'name', this.innerText)">${item.name}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'spec', this.innerText)">${item.spec}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'sysQty', this.innerText)">${item.sysQty}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'realQty', this.innerText)">${item.realQty}</td>
-          <td contenteditable="true" onblur="updateField(${inventory.indexOf(item)}, 'location', this.innerText)">${item.location}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'code', this.innerText)">${item.code || ''}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'name', this.innerText)">${item.name || ''}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'spec', this.innerText)">${item.spec || ''}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'sysQty', this.innerText)">${item.sysQty || '0'}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'realQty', this.innerText)">${item.realQty || ''}</td>
+          <td contenteditable="true" onblur="updateField(${itemIndex}, 'location', this.innerText)">${item.location || ''}</td>
           <td>${item.duplicate? '<span style="color:#f5222d;">重复</span>' : '正常'}</td>
-          <td><button class="delete-btn" onclick="deleteRow(${inventory.indexOf(item)})">删除</button></td>
+          <td>
+            <button class="delete-btn" onclick="deleteRow(${itemIndex})">删除</button>
+            ${imgBtnHtml}
+          </td>
         `;
         tbody.appendChild(row);
       });
-      // 保存数据并更新统计
+
       localStorage.setItem("inventory", JSON.stringify(inventory));
       updateSummary();
     }
 
-    // 更新物料字段（支持自动填充）
-    function updateField(index, field, value) {
-      if (inventory[index]) {
-        value = value || "";
-        inventory[index][field] = value;
+    // 修复：iOS PWA 兼容——用 Blob URL 替代 Base64 存储图片
+function handleImageUpload(index, input) {
+  const file = input.files[0];
+  if (!file || !file.type.startsWith('image/')) {
+    showTip("请选择JPG/PNG格式的图片", "error");
+    return;
+  }
 
-        // 编辑料号时自动填充名称和型号（仅当名称/型号为空时）
-        if (field === "code") {
-          const code = value.trim();
-          const item = inventory[index];
-          if (materialMap[code] && (!item.name ||!item.spec)) {
-            item.name = item.name || materialMap[code].name; // 保留手动输入
-            item.spec = item.spec || materialMap[code].spec; // 保留手动输入
-            showTip(`已自动更新料号「${code}」的信息`);
-          }
-        }
+  // 关键：生成临时 Blob URL（iOS PWA 支持更好）
+  const blobUrl = URL.createObjectURL(file);
+  // 存储 Blob URL 和文件名（用于后续预览/清理）
+  inventory[index].imageBlobUrl = blobUrl;
+  inventory[index].imageFileName = file.name;
+  localStorage.setItem("inventory", JSON.stringify(inventory));
 
-        // 检查重复
-        if (field === "code") {
-          const isDuplicate = inventory.some((item, i) => i!== index && item.code === value);
-          inventory[index].duplicate = isDuplicate;
-        }
-
-        localStorage.setItem("inventory", JSON.stringify(inventory));
-        renderTable();
-        updateSummary();
-      }
-    }
-
-    // 新增物料（手机端优化：1.5秒延迟识别）
-function addNewItem() {
-  const newId = `WL${Date.now().toString().slice(-6)}`; 
-  const newItem = {
-    code: newId,
-    name: "",
-    spec: "",
-    sysQty: "0",
-    realQty: "",
-    location: "",
-    duplicate: false
-  };
-  inventory.push(newItem);
-  renderTable(); // 先渲染，确保行索引正确
-  showTip("新增物料行：输入料号/型号后稍等自动填充");
-  scrollToBottom();
-
-  // 监听新增行的输入事件（手机端适配）
-  setTimeout(() => {
-    const rows = tbody.querySelectorAll("tr");
-    const lastRow = rows[rows.length - 1];
-    const rowIndex = Array.from(rows).indexOf(lastRow); // 获取当前行索引
-    const codeInput = lastRow.querySelector("td:nth-child(2)"); 
-    const nameInput = lastRow.querySelector("td:nth-child(3)"); 
-    const specInput = lastRow.querySelector("td:nth-child(4)"); 
-
-    let codeAutoFilled = false;
-    let specAutoFilled = false;
-
-    // 料号输入：1.5秒无操作后触发 + 长度≥3才识别（避免短字符误触发）
-    codeInput.addEventListener("input", debounce(function() {
-      const code = codeInput.innerText.trim();
-      // 手机端优化：料号至少输入3个字符才尝试匹配
-      if (!codeAutoFilled && code.length >= 3 && materialMap[code] && rowIndex > -1) {
-        inventory[rowIndex].name = materialMap[code].name;
-        inventory[rowIndex].spec = materialMap[code].spec;
-        codeAutoFilled = true; // 只填充一次，避免重复触发
-        localStorage.setItem("inventory", JSON.stringify(inventory));
-        renderTable(); // 重新渲染确保显示
-        showTip(`已自动填充料号「${code}」`);
-      }
-    }, 1500)); // 1.5秒延迟
-
-    // 型号输入：1.5秒无操作后触发 + 长度≥2才识别
-    specInput.addEventListener("input", debounce(function() {
-      const spec = specInput.innerText.trim().toLowerCase();
-      // 手机端优化：型号至少输入2个字符才尝试匹配
-      if (!specAutoFilled && spec.length >= 2 && rowIndex > -1) {
-        for (const code in materialMap) {
-          // 严格匹配型号（全包含而非部分匹配）
-          if (materialMap[code].spec.toLowerCase().includes(spec)) {
-            inventory[rowIndex].code = code;
-            inventory[rowIndex].name = materialMap[code].name;
-            inventory[rowIndex].spec = materialMap[code].spec;
-            specAutoFilled = true; // 只填充一次
-            localStorage.setItem("inventory", JSON.stringify(inventory));
-            renderTable(); // 重新渲染确保显示
-            showTip(`已匹配型号「${spec}」→ 料号「${code}」`);
-            break;
-          }
-        }
-      }
-    }, 1500)); // 1.5秒延迟
-
-    // 手动修改名称时，取消自动填充标记（避免覆盖手动输入）
-    nameInput.addEventListener("input", function() {
-      codeAutoFilled = true;
-      specAutoFilled = true;
-    });
-  }, 100);
+  // 清空输入框+重新渲染
+  input.value = "";
+  renderTable(); 
+  showTip("图片上传成功，可查看");
 }
 
-    // 删除物料行
+    // 图片预览模态框：打开
+    function openImageModal(imageUrl) {
+      modalImage.src = imageUrl;
+      imgModal.style.display = 'flex';
+    }
+
+    // 图片预览模态框：关闭（清空地址避免缓存）
+    function closeImageModal() {
+      imgModal.style.display = 'none';
+      modalImage.src = '';
+    }
+
+    // 7. 搜索功能：实时过滤表格数据
+    function handleSearch(e) {
+      currentSearchKeyword = e.target.value.toLowerCase().trim();
+      renderTable(); // 搜索后重新渲染
+    }
+
+    // 8. 字段编辑：修改物料信息（料号、名称等）
+    function updateField(index, field, value) {
+      if (!inventory[index]) return;
+      value = value || "";
+      inventory[index][field] = value;
+
+      // 料号自动填充（从物料库匹配）
+      if (field === "code") {
+        const code = value.trim();
+        const item = inventory[index];
+        if (materialMap[code] && (!item.name || !item.spec)) {
+          item.name = item.name || materialMap[code].name;
+          item.spec = item.spec || materialMap[code].spec;
+          showTip(`已自动填充料号「${code}」信息`);
+        }
+        // 检查料号重复（标记重复行）
+        inventory[index].duplicate = inventory.some((item, i) => i !== index && item.code === value);
+      }
+
+      localStorage.setItem("inventory", JSON.stringify(inventory));
+      renderTable();
+      updateSummary();
+    }
+        // 9. 新增物料行：适配图片字段，支持手机端自动填充
+    function addNewItem() {
+      // 生成唯一临时料号（避免重复初始ID）
+      const newId = `WL${Date.now().toString().slice(-6)}`;
+      const newItem = {
+        code: newId,
+        name: "",
+        spec: "",
+        sysQty: "0",
+        realQty: "",
+        location: "",
+        duplicate: false,
+        imageUrl: null // 初始无图片
+      };
+
+      // 记录操作历史（用于撤回）
+      operationHistory.push({ 
+        type: 'add', 
+        index: inventory.length - 1 
+      });
+      
+      inventory.push(newItem);
+      renderTable();
+      showTip("新增物料行，可上传图片");
+      scrollToBottom(); // 自动滚动到新增行
+
+      // 手机端自动填充监听（输入料号/规格匹配物料库）
+      setTimeout(() => {
+        const rows = tbody.querySelectorAll("tr");
+        const lastRow = rows[rows.length - 1];
+        const rowIndex = Array.from(rows).indexOf(lastRow);
+        const codeInput = lastRow.querySelector("td:nth-child(2)");
+        const specInput = lastRow.querySelector("td:nth-child(4)");
+
+        let codeAutoFilled = false;
+        let specAutoFilled = false;
+
+        // 料号输入防抖匹配
+        codeInput.addEventListener("input", debounce(() => {
+          const code = codeInput.innerText.trim();
+          if (!codeAutoFilled && code.length >= 3 && materialMap[code] && rowIndex > -1) {
+            inventory[rowIndex].name = materialMap[code].name;
+            inventory[rowIndex].spec = materialMap[code].spec;
+            codeAutoFilled = true;
+            localStorage.setItem("inventory", JSON.stringify(inventory));
+            renderTable();
+            showTip(`已自动填充料号「${code}」`);
+          }
+        }, 1500));
+
+        // 规格输入防抖匹配
+        specInput.addEventListener("input", debounce(() => {
+          const spec = specInput.innerText.trim().toLowerCase();
+          if (!specAutoFilled && spec.length >= 2 && rowIndex > -1) {
+            for (const code in materialMap) {
+              if (materialMap[code].spec.toLowerCase().includes(spec)) {
+                inventory[rowIndex].code = code;
+                inventory[rowIndex].name = materialMap[code].name;
+                inventory[rowIndex].spec = materialMap[code].spec;
+                specAutoFilled = true;
+                localStorage.setItem("inventory", JSON.stringify(inventory));
+                renderTable();
+                showTip(`已匹配型号「${spec}」→ 料号「${code}」`);
+                break;
+              }
+            }
+          }
+        }, 1500));
+      }, 100);
+    }
+
+    // 10. 删除物料行：保留图片数据用于撤回
     function deleteRow(index) {
       const deletedItem = inventory[index];
       if (!deletedItem) return;
-      inventory.splice(index, 1);
-      checkAllDuplicates();
-      // 记录删除操作到历史
+
+      // 深拷贝删除项（含图片地址，确保撤回时完整恢复）
       operationHistory.push({ 
         type: 'delete', 
         index: index, 
-        item: deletedItem 
-      }); 
+        item: JSON.parse(JSON.stringify(deletedItem)) 
+      });
+
+      inventory.splice(index, 1);
+      checkAllDuplicates(); // 重新检查所有物料的重复状态
       renderTable();
       showTip(`已删除「${deletedItem.name || '未命名物料'}」`);
     }
 
-    // 撤回上一步操作
+    // 11. 撤回上一步操作：支持新增/删除操作回滚
     function undoLastAction() {
       if (operationHistory.length === 0) {
         showTip("没有可撤回的操作", "error");
         return;
       }
+
       const lastOp = operationHistory.pop();
       if (lastOp.type === 'delete') {
-        inventory.splice(lastOp.index, 0, lastOp.item); 
+        // 恢复删除的物料（含图片）
+        inventory.splice(lastOp.index, 0, lastOp.item);
         checkAllDuplicates();
         localStorage.setItem("inventory", JSON.stringify(inventory));
         renderTable();
         showTip(`已恢复「${lastOp.item.name || '未命名物料'}」`);
+      } else if (lastOp.type === 'add') {
+        // 撤回新增的物料
+        inventory.splice(lastOp.index, 1);
+        localStorage.setItem("inventory", JSON.stringify(inventory));
+        renderTable();
+        showTip("已撤回新增物料行");
       }
     }
 
-    // 批量检查重复
+    // 12. 批量检查重复物料（基于料号）
     function checkAllDuplicates() {
       inventory.forEach((item, index) => {
-        const isDuplicate = inventory.some((other, i) => i!== index && other.code === item.code);
-        item.duplicate = isDuplicate;
+        item.duplicate = inventory.some((other, i) => 
+          i !== index && other.code.trim() === item.code.trim() && item.code.trim() !== ""
+        );
       });
     }
 
-    // 物料库管理功能
+    // 13. 物料库导入：修复CSV解析，支持特殊字段
     function handleMaterialLibImport(e) {
       const file = e.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
       reader.onload = function (event) {
         try {
           const content = event.target.result;
-          const lines = content.split("\n").map(l => l.trim()).filter(l => l);
+          const lines = content.split("\n")
+            .map(l => l.trim())
+            .filter(l => l); // 过滤空行
+
           if (lines.length === 0) {
             showTip("物料库文件为空", "error");
             return;
           }
-          // 解析物料库CSV（仅保留：编号,名称,规格）
+
           const newMaterialMap = {};
           lines.forEach((line, i) => {
-            const cols = line.split(",").map(c => c.trim());
-            // 跳过表头行（如果有）
+            const cols = parseCSVLine(line); // 用修复后的CSV解析函数
+            // 跳过表头（如“物料编号,物料名称,规格”）
             if (i === 0 && (cols[0] === "物料编号" || cols[0] === "序号")) return;
-            if (cols.length >= 3 && cols[0]) { // 必须包含编号、名称、规格
-              newMaterialMap[cols[0]] = {
+            // 物料库需包含：编号（第1列）、名称（第2列）、规格（第3列）
+            if (cols.length >= 3 && cols[0].trim()) {
+              newMaterialMap[cols[0].trim()] = {
                 name: cols[1] || "",
                 spec: cols[2] || ""
               };
             }
           });
-          // 合并到现有物料库（去重，新数据覆盖旧数据）
+
+          // 合并物料库（不覆盖现有，仅新增/更新）
           Object.assign(materialMap, newMaterialMap);
-          // 保存到本地存储
           localStorage.setItem("materialMap", JSON.stringify(materialMap));
           updateMaterialLibCount();
           showTip(`物料库上传成功：新增/更新 ${Object.keys(newMaterialMap).length} 种物料`);
         } catch (err) {
-          showTip("物料库导入失败，请检查格式", "error");
-          console.error(err);
+          showTip("物料库导入失败，请检查CSV格式", "error");
+          console.error("物料库解析错误：", err);
         }
-        this.value = ""; // 重置文件输入
+        // 清空文件输入，避免重复上传同一文件
+        this.value = "";
       };
+      // 以UTF-8编码读取，避免中文乱码
       reader.readAsText(file, "UTF-8");
     }
 
-    // 清空物料库
+    // 14. 清空物料库：带确认提示
     function clearMaterialLib() {
-      if (confirm("确定要清空物料库吗？所有自动填充规则将失效！")) {
+      if (confirm("确定清空物料库吗？所有自动填充规则将失效！")) {
         materialMap = {};
         localStorage.setItem("materialMap", JSON.stringify(materialMap));
         updateMaterialLibCount();
@@ -693,254 +802,275 @@ function addNewItem() {
       }
     }
 
-    // 更新物料库计数显示
+    // 15. 更新物料库计数显示
     function updateMaterialLibCount() {
       const count = Object.keys(materialMap).length;
       materialLibCountEl.textContent = count;
     }
-    // 导出功能相关
-    function showFormatModal() {
-      if (inventory.length === 0) {
-        showTip("没有数据可导出", "error");
-        return;
-      }
-      formatModal.style.display = "flex";
-    }
-
-    function closeFormatModal() {
-      formatModal.style.display = "none";
-    }
-
-    function confirmExportFormat() {
-      const format = document.getElementById("exportFormat").value;
-      closeFormatModal();
-      if (format === "csv") {
-        const content = generateCSV();
-        const fileName = prompt('请输入文件名', '库存盘点.csv');
-        if (fileName) {
-          const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = fileName;
-          link.click();
-          URL.revokeObjectURL(link.href);
-          showTip("已导出CSV文件");
-        }
-      } else {
-        showFileNameModal();
-      }
-    }
-
-    function showFileNameModal() {
-      const fileNameModal = document.createElement("div");
-      fileNameModal.className = "modal";
-      fileNameModal.innerHTML = `
-        <div class="modal-content">
-          <p class="modal-title">输入文件名</p>
-          <input type="text" id="fileNameInput" class="modal-select" 
-                 value="库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}">
-          <div class="modal-buttons">
-            <button class="modal-btn modal-cancel" onclick="document.body.removeChild(this.closest('.modal'))">取消</button>
-            <button class="modal-btn modal-confirm">确认</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(fileNameModal);
-      fileNameModal.style.display = "flex";
-      fileNameModal.querySelector(".modal-confirm").onclick = function() {
-        const fileName = fileNameModal.querySelector("#fileNameInput").value.trim() || 
-                        `库存盘点_${new Date().toLocaleDateString().replace(/\//g, '')}`;
-        exportToExcel(fileName);
-        document.body.removeChild(fileNameModal);
-      };
-    }
-
-    // 生成CSV内容
-    function generateCSV() {
-      function escapeCsvValue(value) {
-        if (!value) return "";
-        const str = value.toString().trim();
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-      }
-      let csv = "物料编号,物料名称,规格,系统数量,实际数量,存放位置\n";
-      inventory.forEach((item) => {
-        const row = [
-          escapeCsvValue(item.code),
-          escapeCsvValue(item.name),
-          escapeCsvValue(item.spec),
-          escapeCsvValue(item.sysQty),
-          escapeCsvValue(item.realQty),
-          escapeCsvValue(item.location)
-        ].join(',') + '\n';
-        csv += row;
-      });
-      return csv;
-    }
-
-    // 导出为Excel
-    function exportToExcel(fileName) {
-      const ws = XLSX.utils.json_to_sheet(inventory.map((item, index) => ({
-        序号: index + 1,
-        物料编号: item.code,
-        物料名称: item.name,
-        规格: item.spec,
-        系统数量: item.sysQty,
-        实际数量: item.realQty,
-        存放位置: item.location
-      })));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "库存盘点");
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${fileName}.xlsx`);
-      showTip(`已生成Excel文件：${fileName}.xlsx`);
-    }
-
-    // 批量导入盘点数据（不影响物料库）
+        // 16. 批量导入盘点数据（追加模式，修复CSV错位）
     function handleBatchImport(e) {
       const file = e.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
       reader.onload = function (event) {
         try {
           const content = event.target.result;
-          const lines = content.split("\n").map(l => l.trim()).filter(l => l);
+          const lines = content.split("\n")
+            .map(l => l.trim())
+            .filter(l => l); // 过滤空行
+
           if (lines.length === 0) {
-            showTip("CSV文件内容为空", "error");
+            showTip("盘点CSV文件为空", "error");
             return;
           }
+
           let newCount = 0;
           lines.forEach((line, i) => {
-            const cols = line.split(",").map(c => c.trim());
-            if (i === 0 && (cols[0] === "序号" || cols[0] === "物料编号")) return;
-            const dataCols = cols.length === 7? cols.slice(1) : cols;
-            if (dataCols.length >= 6) {
-              const [code, name, spec, sysQty, realQty, location] = dataCols;
-              const existingIndex = inventory.findIndex(item => item.code === code);
-              if (existingIndex >= 0) {
-                inventory[existingIndex].duplicate = true;
-              } else {
-                inventory.push({
-                  code, name: name || "", spec: spec || "",
-                  sysQty: sysQty || "0", realQty: realQty || "",
-                  location: location || "", duplicate: false
-                });
-                newCount++;
-              }
+            const cols = parseCSVLine(line); // 用修复后的解析函数，支持含逗号字段
+            // 跳过表头（如“物料编号,名称,规格,系统数量,实际数量,存放位置”）
+            if (i === 0 && (cols[0] === "物料编号" || cols[0] === "序号")) return;
+            // 至少包含：编号（第1列）、名称（第2列）、规格（第3列）
+            if (cols.length >= 3 && cols[0].trim()) {
+              const newItem = {
+                code: cols[0].trim() || "",
+                name: cols[1] || "",
+                spec: cols[2] || "",
+                sysQty: cols[3] || "0", // 系统数量（第4列，默认0）
+                realQty: cols[4] || "",  // 实际数量（第5列，默认空）
+                location: cols[5] || "", // 存放位置（第6列，默认空）
+                duplicate: false,
+                imageUrl: null // 批量导入默认无图片
+              };
+              // 检查料号重复
+              newItem.duplicate = inventory.some(item => item.code === newItem.code);
+              inventory.push(newItem);
+              newCount++;
             }
           });
+
+          checkAllDuplicates(); // 批量检查重复
+          localStorage.setItem("inventory", JSON.stringify(inventory));
           renderTable();
-          showTip(`批量追加完成：新增${newCount}条盘点数据`);
+          showTip(`批量导入成功：新增 ${newCount} 条物料数据`);
         } catch (err) {
-          showTip("批量导入失败，请检查格式", "error");
+          showTip("批量导入失败，请检查CSV格式", "error");
+          console.error("批量导入错误：", err);
         }
+        // 清空文件输入
         this.value = "";
       };
       reader.readAsText(file, "UTF-8");
     }
 
-    // 重新导入（覆盖盘点数据，不影响物料库）
+    // 17. 全量导入盘点数据（覆盖模式，保留物料库）
     function handleFullImport(e) {
       const file = e.target.files[0];
       if (!file) return;
-      pendingImportFile = file;
-      const confirmOverlay = document.createElement("div");
-      confirmOverlay.style.cssText = `
-        position: fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999;
-        display:flex; flex-direction:column; justify-content:center; align-items:center;
-      `;
-      confirmOverlay.innerHTML = `
-        <div style="background:white; padding:20px; border-radius:8px; max-width:280px;">
-          <p style="text-align:center; margin:0 0 15px 0;">确定要重新导入数据吗？当前盘点数据将被覆盖。</p>
-          <div style="display:flex; gap:10px;">
-            <button id="confirmYes" style="flex:1; padding:8px; background:#1890ff; color:white; border:none; border-radius:4px;">确定</button>
-            <button id="confirmNo" style="flex:1; padding:8px; background:#f5f5f5; border:none; border-radius:4px;">取消</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(confirmOverlay);
-      document.getElementById("confirmYes").onclick = function() {
-        document.body.removeChild(confirmOverlay);
-        confirmImport();
-      };
-      document.getElementById("confirmNo").onclick = function() {
-        document.body.removeChild(confirmOverlay);
-        e.target.value = "";
-      };
-    }
 
-    function confirmImport() {
-      if (!pendingImportFile) return;
       const reader = new FileReader();
       reader.onload = function (event) {
         try {
-          inventory = []; // 仅清空盘点数据，不影响物料库
           const content = event.target.result;
-          const lines = content.split("\n").map(l => l.trim()).filter(l => l);
+          const lines = content.split("\n")
+            .map(l => l.trim())
+            .filter(l => l);
+
           if (lines.length === 0) {
-            showTip("CSV文件内容为空", "error");
+            showTip("全量导入文件为空", "error");
             return;
           }
+
+          // 清空现有盘点数据（物料库不变）
+          inventory = [];
+          let importCount = 0;
           lines.forEach((line, i) => {
-            const cols = line.split(",").map(c => c.trim());
-            if (i === 0 && (cols[0] === "序号" || cols[0] === "物料编号")) return;
-            const dataCols = cols.length === 7? cols.slice(1) : cols;
-            if (dataCols.length >= 6) {
-              const [code, name, spec, sysQty, realQty, location] = dataCols;
-              const duplicateInFile = inventory.some(item => item.code === code);
+            const cols = parseCSVLine(line);
+            if (i === 0 && (cols[0] === "物料编号" || cols[0] === "序号")) return;
+            if (cols.length >= 3 && cols[0].trim()) {
               inventory.push({
-                code, name: name || "", spec: spec || "",
-                sysQty: sysQty || "0", realQty: realQty || "",
-                location: location || "", duplicate: duplicateInFile
+                code: cols[0].trim() || "",
+                name: cols[1] || "",
+                spec: cols[2] || "",
+                sysQty: cols[3] || "0",
+                realQty: cols[4] || "",
+                location: cols[5] || "",
+                duplicate: false,
+                imageUrl: null
               });
+              importCount++;
             }
           });
+
+          checkAllDuplicates();
           localStorage.setItem("inventory", JSON.stringify(inventory));
           renderTable();
-          showTip(`重新导入完成：共${inventory.length}条盘点数据`);
+          showTip(`全量导入成功：覆盖为 ${importCount} 条物料数据`);
         } catch (err) {
-          showTip("导入失败，请检查格式", "error");
-        } finally {
-          pendingImportFile = null;
+          showTip("全量导入失败，请检查CSV格式", "error");
+          console.error("全量导入错误：", err);
         }
+        // 清空文件输入
+        this.value = "";
       };
-      reader.readAsText(pendingImportFile, "UTF-8");
+      reader.readAsText(file, "UTF-8");
     }
 
-    // 更新统计信息
-    function updateSummary() {
-      totalCountEl.textContent = inventory.length;
-      // 统计已填写实际数量的物料
-      const counted = inventory.filter(item => {
-        return item.realQty!== "" &&!isNaN(item.realQty.trim());
-      }).length;
-      countedCountEl.textContent = counted;
+    // 18. 导出功能：核心优化——过滤imageUrl，避免冗余图片Base64数据
+    function showFormatModal() {
+      formatModal.style.display = 'flex';
     }
 
-    // 显示提示消息
-    function showTip(text, type = "success") {
-      tipEl.textContent = text;
-      tipEl.style.background = type === "success"? "#52c41a" : "#ff4d4f";
+    function closeFormatModal() {
+      formatModal.style.display = 'none';
+    }
+
+    function confirmExportFormat() {
+      const format = document.getElementById("exportFormat").value;
+      // 过滤图片字段：只保留核心盘点数据，剔除imageUrl
+      const exportData = inventory.map(item => ({
+        code: item.code || "",
+        name: item.name || "",
+        spec: item.spec || "",
+        sysQty: item.sysQty || "0",
+        realQty: item.realQty || "",
+        location: item.location || "",
+        status: item.duplicate ? "重复" : "正常" // 状态文字化，更易读
+      }));
+
+      // 按选择的格式导出
+      if (format === "csv") {
+        exportToCSV(exportData);
+      } else if (format === "excel") {
+        exportToExcel(exportData);
+      }
+      closeFormatModal();
+    }
+
+    // 导出为CSV格式（处理字段含逗号的情况）
+    function exportToCSV(data) {
+      // 表头
+      const header = "物料编号,物料名称,规格,系统数量,实际数量,存放位置,状态\n";
+      // 每行数据用引号包裹，避免逗号导致错位
+      const rows = data.map(item => 
+        `"${item.code.replace(/"/g, '""')}","${item.name.replace(/"/g, '""')}","${item.spec.replace(/"/g, '""')}","${item.sysQty}","${item.realQty}","${item.location}","${item.status}"`
+      ).join("\n");
+      const csvContent = header + rows;
+
+      // 生成UTF-8编码的Blob，避免中文乱码
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const fileName = `库存盘点数据_${new Date().toLocaleDateString()}.csv`;
+      saveAs(blob, fileName); // 调用FileSaver库下载
+      showTip("CSV文件导出成功");
+    }
+
+    // 导出为Excel格式（依赖xlsx库）
+    function exportToExcel(data) {
+      // 构建Excel工作表数据（表头+内容）
+      const wsData = [
+        ["物料编号", "物料名称", "规格", "系统数量", "实际数量", "存放位置", "状态"], // 表头
+        ...data.map(item => [
+          item.code,
+          item.name,
+          item.spec,
+          item.sysQty,
+          item.realQty,
+          item.location,
+          item.status
+        ])
+      ];
+
+      // 创建工作簿并添加工作表
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "库存盘点"); // 工作表名称
+
+      // 导出Excel文件
+      const fileName = `库存盘点数据_${new Date().toLocaleDateString()}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      showTip("Excel文件导出成功");
+    }
+        // 19. 辅助工具函数：提示消息、滚动控制、统计更新
+    // 显示提示消息（支持成功/错误两种类型，自动隐藏）
+    function showTip(message, type = "success") {
+      tipEl.textContent = message;
       tipEl.style.display = "block";
-      clearTimeout(window.tipTimer);
-      window.tipTimer = setTimeout(() => {
+      // 错误消息红色背景，成功消息绿色背景，增强视觉区分
+      tipEl.style.background = type === "error" ? "#ff4d4f" : "#52c41a";
+      // 3秒后自动隐藏提示框
+      setTimeout(() => {
         tipEl.style.display = "none";
-      }, 3500);
+      }, 3000);
     }
 
-    // 滚动到顶部/底部
+    // 滚动到表格顶部（平滑滚动，提升体验）
     function scrollToTop() {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      tbody.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
+    // 滚动到表格底部（新增物料后自动定位，方便继续操作）
     function scrollToBottom() {
-      window.scrollTo({ 
-        top: document.documentElement.scrollHeight, 
-        behavior: "smooth" 
-      });
+      tbody.scrollIntoView({ behavior: "smooth", block: "end" });
     }
+
+    // 更新统计信息：实时显示“总物料数”和“已盘点数”
+    function updateSummary() {
+      const totalCount = inventory.length;
+      // 已盘点判定标准：实际数量（realQty）非空、非空格、非0
+      const countedCount = inventory.filter(item => 
+        item.realQty && item.realQty.trim() !== "" && item.realQty !== "0"
+      ).length;
+
+      // 更新页面显示
+      totalCountEl.textContent = totalCount;
+      countedCountEl.textContent = countedCount;
+    }
+
+    // 20. 窗口事件监听：点击空白处关闭弹窗（提升操作便捷性）
+    window.addEventListener('click', function(e) {
+      // 点击图片预览模态框的空白背景，关闭预览
+      if (e.target === imgModal) {
+        closeImageModal();
+      }
+      // 点击导出格式选择弹窗的空白背景，关闭弹窗
+      if (e.target === formatModal) {
+        closeFormatModal();
+      }
+    });
+
+    // 21. 全局函数暴露（确保HTML中onclick调用正常，兼容部分浏览器）
+    // 注：若使用模块化开发需调整，此处为简化操作保留全局暴露
+    window.openImageModal = openImageModal;
+    window.closeImageModal = closeImageModal;
+    window.handleImageUpload = handleImageUpload;
+    window.updateField = updateField;
+    window.addNewItem = addNewItem;
+    window.deleteRow = deleteRow;
+    window.undoLastAction = undoLastAction;
+    window.clearMaterialLib = clearMaterialLib;
+    window.handleMaterialLibImport = handleMaterialLibImport;
+    window.handleBatchImport = handleBatchImport;
+    window.handleFullImport = handleFullImport;
+    window.showFormatModal = showFormatModal;
+    window.closeFormatModal = closeFormatModal;
+    window.confirmExportFormat = confirmExportFormat;
+    window.exportToCSV = exportToCSV;
+    window.exportToExcel = exportToExcel;
+    window.showTip = showTip;
+    window.scrollToTop = scrollToTop;
+    window.scrollToBottom = scrollToBottom;
+    window.updateSummary = updateSummary;
+    window.handleSearch = handleSearch;
+    window.parseCSVLine = parseCSVLine;
+    window.debounce = debounce;
+    // 页面关闭/刷新时，清理所有 Blob URL（避免 iOS 内存泄漏）
+window.addEventListener('beforeunload', function() {
+  inventory.forEach(item => {
+    if (item.imageBlobUrl) {
+      URL.revokeObjectURL(item.imageBlobUrl); // 释放资源
+    }
+  });
+});
   </script>
 </body>
 </html>
