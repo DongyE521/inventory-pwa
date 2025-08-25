@@ -1,12 +1,15 @@
 {
-  "name": "库存盘点系统",
-  "short_name": "库存盘点",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2196f3",
+  "name": "库存盘点",
+  "short_name": "库存",
+  "display": "standalone", // 关键：独立窗口模式
+  "start_url": "./",
   "icons": [
-    {"src": "icon.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon.png", "sizes": "512x512", "type": "image/png"}
-  ]
+    {
+      "src": "icon.png", // 准备一个 192x192 的图标（必须有，否则 iOS 不识别为 PWA）
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "background_color": "#ffffff",
+  "theme_color": "#2196f3"
 }
